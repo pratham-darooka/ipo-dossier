@@ -26,6 +26,14 @@ export async function GET(req: Request) {
   if (!authed(req)) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   if (!(await dbReady())) return NextResponse.json({ ok: false, error: "DATABASE_URL not configured" }, { status: 500 });
 
+  // ?stage=ping -> auth + DB probe only (fast ops check)
+  const { searchParams: sp } = new URL(req.url);
+  if (sp.get("stage") === "ping") {
+    const rows = await sql()!`SELECT count(*)::int AS n FROM ipo`;
+    return NextResponse.json({ ok: true, db: "neon", rows: rows[0].n, at: new Date().toISOString() });
+  }
+  const enrich = sp.get("stage") !== "sync"; // ?stage=sync skips enrichment
+
   const [upcoming, live] = await Promise.all([fetchNseUpcoming(), fetchNseLive()]);
   const liveBySymbol = new Map(live.map((l) => [l.symbol, l]));
   const liveByName = new Map(live.map((l) => [normName(l.company), l]));
@@ -129,8 +137,8 @@ export async function GET(req: Request) {
   let timedOut = false;
 
   for (const r of all) {
-    if (Date.now() > DEADLINE) {
-      timedOut = true;
+    if (!enrich || Date.now() > DEADLINE) {
+      if (enrich && Date.now() > DEADLINE) timedOut = true;
       break;
     }
     const d = r.data as IpoSeed & { docUrl?: string };
