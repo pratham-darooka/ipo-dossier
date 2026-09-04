@@ -1,7 +1,7 @@
 import { dbReady, sql } from "./db";
 import type { IpoSeed } from "./data";
 
-export type DossierCheck = { label: string; done: boolean; detail: string };
+export type DossierCheck = { label: string; state: "done" | "pending" | "na"; detail: string };
 export type DossierRow = {
   slug: string;
   company: string;
@@ -16,38 +16,39 @@ const GMP_FRESH_MS = 48 * 3600000;
 
 export function dossierChecks(d: IpoSeed): { checks: DossierCheck[]; pct: number; nextStep: string } {
   const gmpAge = d.gmp.at ? Date.now() - new Date(d.gmp.at).getTime() : Infinity;
+  const listed = d.status === "listed";
   const checks: DossierCheck[] = [
-    { label: "Calendar", done: Boolean(d.openDate), detail: d.openDate ? d.openDate.slice(0, 10) : "awaiting NSE" },
-    { label: "Band", done: d.priceMax > 0, detail: d.priceMax > 0 ? `₹${d.priceMin}–₹${d.priceMax}` : "drops ~a week pre-open" },
+    { label: "Calendar", state: d.openDate ? "done" : "pending", detail: d.openDate ? d.openDate.slice(0, 10) : "awaiting NSE" },
+    { label: "Band", state: d.priceMax > 0 ? "done" : "pending", detail: d.priceMax > 0 ? `₹${d.priceMin}–₹${d.priceMax}` : "drops ~a week pre-open" },
     {
       label: "Demand",
-      done: d.subscription.total > 0,
-      detail: d.subscription.total > 0 ? `${d.subscription.total}x total` : d.status === "listed" ? "window shut" : "opens Day 1",
+      state: d.subscription.total > 0 ? "done" : "pending",
+      detail: d.subscription.total > 0 ? `${d.subscription.total}x total` : d.status === "upcoming" ? "opens Day 1" : "resolving final figures",
     },
     {
       label: "Financials",
-      done: (d.financials?.length ?? 0) > 0,
-      detail: d.financials?.length ? `${d.financials.length}yr parsed` : "RHP pending",
+      state: (d.financials?.length ?? 0) >= 3 ? "done" : "pending",
+      detail: d.financials?.length ? `${d.financials.length}/3yr parsed` : "RHP pending",
     },
-    {
-      label: "GMP",
-      done: gmpAge < GMP_FRESH_MS,
-      detail: d.gmp.pct > 0 ? (gmpAge < GMP_FRESH_MS ? `+${d.gmp.pct}% fresh` : `+${d.gmp.pct}% stale`) : "no quote yet",
-    },
+    // GMP is meaningless post-listing — N/A for listed (the ledger takes over), live check for the rest.
+    listed
+      ? { label: "GMP", state: "na", detail: "n/a post-listing — see ledger" }
+      : { label: "GMP", state: gmpAge < GMP_FRESH_MS ? "done" : "pending", detail: d.gmp.pct > 0 ? `+${d.gmp.pct}%` : "no quote yet" },
   ];
-  if (d.status === "listed") {
+  if (listed) {
     checks.push({
       label: "Listing",
-      done: d.listingPrice != null,
+      state: d.listingPrice != null ? "done" : "pending",
       detail: d.listingPrice != null ? `₹${d.listingPrice} (${d.listingGainPct}%)` : "resolving",
     });
   }
   if (d.status === "live") {
-    checks.push({ label: "News", done: (d.news?.length ?? 0) > 0, detail: d.news?.length ? `${d.news.length} stories` : "collecting" });
+    checks.push({ label: "News", state: (d.news?.length ?? 0) > 0 ? "done" : "pending", detail: d.news?.length ? `${d.news.length} stories` : "collecting" });
   }
-  const done = checks.filter((c) => c.done).length;
-  const firstOpen = checks.find((c) => !c.done);
-  return { checks, pct: Math.round((done / checks.length) * 100), nextStep: firstOpen ? `${firstOpen.label}: ${firstOpen.detail}` : "Complete ✓" };
+  const applicable = checks.filter((c) => c.state !== "na");
+  const done = applicable.filter((c) => c.state === "done").length;
+  const firstOpen = applicable.find((c) => c.state !== "done");
+  return { checks, pct: applicable.length ? Math.round((done / applicable.length) * 100) : 100, nextStep: firstOpen ? `${firstOpen.label}: ${firstOpen.detail}` : "Complete ✓" };
 }
 
 export type PipelineStatus = {

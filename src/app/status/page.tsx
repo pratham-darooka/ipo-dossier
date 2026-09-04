@@ -80,7 +80,7 @@ export default async function StatusPage() {
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
               {r.checks.map((c) => (
                 <span key={c.label} className="inline-flex items-center gap-1 opacity-80" title={c.detail}>
-                  {c.done ? <Check className="size-3.5 text-[#9db82a] dark:text-[#D4FF4F]" /> : <CircleDashed className="size-3.5 opacity-40" />}
+                  {c.state === "done" ? <Check className="size-3.5 text-[#9db82a] dark:text-[#D4FF4F]" /> : c.state === "na" ? <span className="font-mono2 text-[10px] opacity-40">N/A</span> : <CircleDashed className="size-3.5 opacity-40" />}
                   {c.label}
                 </span>
               ))}

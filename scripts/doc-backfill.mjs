@@ -11,6 +11,7 @@ for (const line of env.split("\n")) {
   if (m) process.env[m[1]] = m[2];
 }
 const MAX = Number(process.argv[2] || 20);
+const ONLY = (process.argv[3] || "").toLowerCase();
 const { neon } = await import("@neondatabase/serverless");
 const { extractText } = await import("unpdf");
 
@@ -111,6 +112,7 @@ const rows = await sql`SELECT slug,company,status,data FROM ipo WHERE slug!='_pi
 const rank = (s) => (s === "upcoming" ? 0 : 1);
 const targets = rows
   .filter((r) => (r.data.financials?.length ?? 0) === 0)
+  .filter((r) => !ONLY || r.slug.toLowerCase().includes(ONLY))
   .sort((a, b) => rank(a.status) - rank(b.status) || String(a.data.openDate || "9").localeCompare(String(b.data.openDate || "9")))
   .slice(0, MAX);
 
