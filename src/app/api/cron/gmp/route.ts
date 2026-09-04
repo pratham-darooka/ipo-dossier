@@ -44,5 +44,11 @@ export async function GET(req: Request) {
     await q`UPDATE ipo SET data = ${JSON.stringify(d)}::jsonb, updated_at = NOW() WHERE slug = ${r.slug}`;
   }
 
+  await q`
+    INSERT INTO ipo (slug, company, status, data)
+    VALUES ('_pipeline_gmp', '_pipeline', 'listed', ${JSON.stringify({ at: new Date().toISOString(), checked: rows.length, refreshed, stale })}::jsonb)
+    ON CONFLICT (slug) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+  `;
+
   return NextResponse.json({ ok: true, checked: rows.length, refreshed, stale, at: new Date().toISOString() });
 }

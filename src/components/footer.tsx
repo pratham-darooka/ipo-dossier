@@ -16,7 +16,8 @@ export function Footer() {
           <div>AI → Groq Llama-3.3 (grounded on filings only)</div>
           <div>DATA → Neon Postgres · Vercel Cron 30min</div>
         </div>
-        <div className="flex md:justify-end gap-3 items-start">
+        <div className="flex md:justify-end gap-3 items-start flex-wrap">
+          <Link href="/status" className="rounded-full border border-[#D4FF4F]/40 px-4 py-2">● System status</Link>
           <Link href="/performance" className="rounded-full border border-white/15 px-4 py-2 hover:bg-white/5">GMP accuracy</Link>
           <Link href="/calendar" className="rounded-full bg-white text-black px-4 py-2 font-semibold dark:bg-[#D4FF4F]">Calendar</Link>
         </div>
