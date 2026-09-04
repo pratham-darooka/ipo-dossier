@@ -277,6 +277,10 @@ export type Evergreen = {
   sub: string;
   points: string[];
   cta: string;
+  template?: "numbered" | "duel" | "stat" | "checklist" | "timeline" | "mythfact";
+  versus?: { a: string; aSub: string; b: string; bSub: string; verdict: string };
+  stat?: { big: string; small: string };
+  mythfact?: { myth: string; fact: string };
 };
 
 export function EvergreenCover({ post, n, of }: { post: Evergreen; n: number; of: number }) {
@@ -339,3 +343,139 @@ export function EvergreenCta({ post, n, of }: { post: Evergreen; n: number; of: 
 }
 
 export const EVERGREEN_SLIDES = [EvergreenCover, EvergreenBody, EvergreenCta];
+
+/* ---------------- Alternate evergreen bodies (same design tokens) ---------------- */
+
+export function DuelBody({ post, n, of }: { post: Evergreen; n: number; of: number }) {
+  const v = post.versus ?? { a: "A", aSub: "", b: "B", bSub: "", verdict: "" };
+  return (
+    <Frame foot={`SLIDE ${n}/${of} · HEAD TO HEAD`}>
+      <div style={{ fontSize: 60, fontWeight: 900 }}>Head to head</div>
+      <div style={{ display: "flex", gap: 24, marginTop: 28 }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "rgba(255,255,255,0.06)", borderRadius: 24, padding: 30 }}>
+          <div style={{ fontSize: 44, fontWeight: 900 }}>{v.a}</div>
+          <div style={{ fontSize: 30, color: "#8A94A6", marginTop: 10, lineHeight: 1.35 }}>{v.aSub}</div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "rgba(212,255,79,0.1)", borderRadius: 24, padding: 30 }}>
+          <div style={{ fontSize: 44, fontWeight: 900, color: "#D4FF4F" }}>{v.b}</div>
+          <div style={{ fontSize: 30, color: "#E8E8E8", marginTop: 10, lineHeight: 1.35 }}>{v.bSub}</div>
+        </div>
+      </div>
+      <div style={{ fontSize: 34, marginTop: 30, fontWeight: 700 }}>{`Verdict: ${v.verdict}`}</div>
+    </Frame>
+  );
+}
+
+export function StatBody({ post, n, of }: { post: Evergreen; n: number; of: number }) {
+  const s = post.stat ?? { big: "—", small: "" };
+  return (
+    <Frame foot={`SLIDE ${n}/${of} · ONE NUMBER`}>
+      <div style={{ fontSize: 200, fontWeight: 900, color: "#D4FF4F", lineHeight: 1 }}>{s.big}</div>
+      <div style={{ fontSize: 38, marginTop: 20, lineHeight: 1.35, maxWidth: 900 }}>{s.small}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 30 }}>
+        {post.points.slice(0, 2).map((p) => (
+          <div key={p} style={{ fontSize: 30, color: "#8A94A6" }}>{`· ${p}`}</div>
+        ))}
+      </div>
+    </Frame>
+  );
+}
+
+export function ChecklistBody({ post, n, of }: { post: Evergreen; n: number; of: number }) {
+  return (
+    <Frame foot={`SLIDE ${n}/${of} · TICK BEFORE YOU APPLY`}>
+      <div style={{ fontSize: 60, fontWeight: 900 }}>The checklist</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 22, marginTop: 30 }}>
+        {post.points.slice(0, 5).map((p) => (
+          <div key={p} style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                minWidth: 60,
+                height: 60,
+                borderRadius: 16,
+                border: "3px solid #D4FF4F",
+                color: "#D4FF4F",
+                fontSize: 34,
+                fontWeight: 900,
+              }}
+            >
+              ✓
+            </div>
+            <div style={{ fontSize: 34, lineHeight: 1.35 }}>{p}</div>
+          </div>
+        ))}
+      </div>
+    </Frame>
+  );
+}
+
+export function TimelineBody({ post, n, of }: { post: Evergreen; n: number; of: number }) {
+  return (
+    <Frame foot={`SLIDE ${n}/${of} · HOW IT UNFOLDS`}>
+      <div style={{ fontSize: 60, fontWeight: 900 }}>The timeline</div>
+      <div style={{ display: "flex", flexDirection: "column", marginTop: 26 }}>
+        {post.points.slice(0, 5).map((p, i, arr) => (
+          <div key={p} style={{ display: "flex", gap: 22, alignItems: "flex-start" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 60,
+                  height: 60,
+                  borderRadius: 30,
+                  background: i === 0 ? "#D4FF4F" : "rgba(255,255,255,0.12)",
+                  color: i === 0 ? "#080A0F" : "#F2F4F8",
+                  fontSize: 30,
+                  fontWeight: 900,
+                }}
+              >
+                {String(i + 1)}
+              </div>
+              {i < arr.length - 1 && <div style={{ width: 4, height: 34, background: "rgba(255,255,255,0.15)" }} />}
+            </div>
+            <div style={{ fontSize: 34, lineHeight: 1.3, paddingTop: 8 }}>{p}</div>
+          </div>
+        ))}
+      </div>
+    </Frame>
+  );
+}
+
+export function MythFactBody({ post, n, of }: { post: Evergreen; n: number; of: number }) {
+  const m = post.mythfact ?? { myth: post.points[0] ?? "", fact: post.points[1] ?? "" };
+  return (
+    <Frame foot={`SLIDE ${n}/${of} · MYTH → FACT`}>
+      <div style={{ display: "flex", flexDirection: "column", background: "rgba(255,92,92,0.1)", borderRadius: 24, padding: 34 }}>
+        <div style={{ fontSize: 28, color: "#FF5C5C", fontWeight: 800 }}>MYTH</div>
+        <div style={{ fontSize: 40, marginTop: 10, lineHeight: 1.3, textDecoration: "line-through", textDecorationColor: "#FF5C5C" }}>{m.myth}</div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", background: "rgba(212,255,79,0.1)", borderRadius: 24, padding: 34, marginTop: 24 }}>
+        <div style={{ fontSize: 28, color: "#D4FF4F", fontWeight: 800 }}>FACT</div>
+        <div style={{ fontSize: 40, marginTop: 10, lineHeight: 1.3 }}>{m.fact}</div>
+      </div>
+    </Frame>
+  );
+}
+
+/** Body dispatcher — cover/cta stay identical, bodies rotate by concept. */
+export function EvergreenBodyFor(post: Evergreen) {
+  switch (post.template) {
+    case "duel":
+      return DuelBody;
+    case "stat":
+      return StatBody;
+    case "checklist":
+      return ChecklistBody;
+    case "timeline":
+      return TimelineBody;
+    case "mythfact":
+      return MythFactBody;
+    default:
+      return EvergreenBody;
+  }
+}

@@ -16,6 +16,11 @@ cp .env.example .env   # ← PASTE your keys here when asked
 npm run dev             # http://localhost:3000
 ```
 
+## Content studio (Instagram engine)
+
+Password-gated at `/studio` (`STUDIO_PASSWORD` env). See `SOCIAL_PLAYBOOK.md` for the full team workflow:
+cadence (1/day, IPO at T-2), ZIP bundles, captions, no-repeat posted-log, Groq draft writer.
+
 ## How data flows (automated OSINT)
 
 - `src/lib/scrapers/` → NSE upcoming-issues API, Chittorgarh dashboard, GMP aggregators (unofficial, timestamped), SEBI pipeline

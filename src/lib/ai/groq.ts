@@ -98,6 +98,17 @@ export async function groqExtractFiling(excerpt: string): Promise<Record<string,
   }
 }
 
+/** Generic JSON worker with model fallback (powers the social draft engine). */
+export async function groqJson(system: string, user: string, maxTokens = 1200): Promise<Record<string, unknown> | null> {
+  const text = await chat({ system, user, maxTokens, json: true, temperature: 0.7 });
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
 export function groqConfigured() {
   return Boolean(process.env.GROQ_API_KEY);
 }
