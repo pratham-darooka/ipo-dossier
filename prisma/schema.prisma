@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Holy-grail IPO store. Live scraped rows upsert by slug.
+// History arrays stored as JSON so charts work without extra tables.
+model Ipo {
+  id               String   @id @default(cuid())
+  slug             String   @unique
+  company          String
+  sector           String   @default("—")
+  status           String   @default("upcoming") // filed | approved | live | allotted | listed | withdrawn
+  exchange         String   @default("NSE,BSE")
+  openDate         DateTime?
+  closeDate        DateTime?
+  allotmentDate    DateTime?
+  listingDate      DateTime?
+  priceMin         Float?
+  priceMax         Float?
+  lotSize          Int?
+  issueSizeCr      Float?
+  freshIssuePct    Float?
+  ofsPct           Float?
+  promoterPre      Float?
+  promoterPost     Float?
+  registrar        String?
+  leadManagers     Json     @default("[]")
+  objectsOfIssue   Json     @default("[]")
+  financials       Json     @default("[]") // [{fy, revenueCr, patCr, roe, roce, de, cfoCr}]
+  peers            Json     @default("[]") // [{name, pe, pb, roe}]
+  subscription     Json     @default("{}") // {qib, nii, retail, employee, total, history:[{t,qib,nii,retail,total}]}
+  gmp              Json     @default("{}") // {value, pct, history:[{t, value}]}
+  anchor           Json     @default("[]")
+  risks            Json     @default("[]")
+  news             Json     @default("[]")
+  drhpUrl          String?
+  rhpUrl           String?
+  scoreListing     Float?
+  scoreLongTerm    Float?
+  verdictListing   String?
+  verdictLongTerm  String?
+  aiSummary        Json?
+  updatedAt        DateTime @updatedAt
+  createdAt        DateTime @default(now())
+
+  @@index([status])
+  @@index([closeDate])
+}
