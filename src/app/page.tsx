@@ -85,16 +85,28 @@ export default async function Home() {
             <Link href="/calendar" className="hidden sm:inline-flex items-center gap-1 text-sm font-bold">Full calendar <ArrowUpRight className="size-4" /></Link>
           </div>
         </Reveal>
-        <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {live.map((ipo, i) => <IpoCard key={ipo.slug} ipo={ipo} index={i} />)}
-        </div>
+        {live.length ? (
+          <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {live.map((ipo, i) => <IpoCard key={ipo.slug} ipo={ipo} index={i} />)}
+          </div>
+        ) : (
+          <div className="mt-6 rounded-[2rem] border border-dashed border-white/20 p-8 md:p-10 flex flex-wrap items-center gap-4">
+            <div>
+              <div className="font-display text-2xl font-black">No IPO bidding right now — the window is quiet.</div>
+              <p className="mt-1 text-sm opacity-60">
+                {upcoming.length ? <>Next up: <b>{upcoming.slice().sort((a, b) => +new Date(a.openDate || "9999") - +new Date(b.openDate || "9999"))[0].company}</b> opens soon. Track it below or on the calendar.</> : "New dates land here straight from NSE."}
+              </p>
+            </div>
+            <Link href="/calendar" className="ml-auto rounded-full bg-[#D4FF4F] px-6 py-3 text-sm font-bold text-black hover:brightness-110">See what{"'"}s next →</Link>
+          </div>
+        )}
       </section>
 
       {/* UPCOMING */}
       <section className="mx-auto max-w-7xl px-4 sm:px-6 pt-14">
         <Reveal>
           <h2 className="font-display text-4xl md:text-5xl font-black">⏳ Opening soon</h2>
-          <p className="mt-2 opacity-60">Price band is out. Study the dossier before Day 1 — QIB Day-1 tells you everything.</p>
+          <p className="mt-2 opacity-60">Bands drop ~a week before open — dossiers build automatically. Study the calendar before Day 1: QIB Day-1 tells you everything.</p>
         </Reveal>
         <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {upcoming.map((ipo, i) => <IpoCard key={ipo.slug} ipo={ipo} index={i} />)}
