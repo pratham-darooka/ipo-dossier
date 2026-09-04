@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowDown, ArrowUpRight, BadgeCheck, Scale, Telescope } from "lucide-react";
 import { getAllIpos } from "@/lib/ipos";
-import { TickerTape } from "@/components/ticker-tape";
 import { IpoCard } from "@/components/ipo-card";
 import { Reveal } from "@/components/reveal";
 import { SITE_URL } from "@/lib/seo";
@@ -77,8 +76,6 @@ export default async function Home() {
           </Reveal>
         </div>
       </section>
-
-      <TickerTape ipos={IPOS} />
 
       {/* LIVE */}
       <section id="live" className="mx-auto max-w-7xl px-4 sm:px-6 pt-14">
