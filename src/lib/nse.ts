@@ -27,7 +27,7 @@ export type NseLive = {
 
 async function nseJson(url: string): Promise<unknown> {
   const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), 15000);
+  const t = setTimeout(() => ctrl.abort(), 10000);
   try {
     const r = await fetch(url, {
       headers: { "User-Agent": UA, Accept: "application/json", Referer: "https://www.nseindia.com/market-data/all-upcoming-issues-ipo" },

@@ -111,12 +111,21 @@ export async function GET(req: Request) {
   const rank = (s: string) => (s === "live" ? 0 : s === "upcoming" ? 1 : 2);
   all.sort((a, b) => rank(a.status) - rank(b.status));
 
+  // Sync checkpoint first: NSE overlay + transitions are committed even if
+  // enrichment later exhausts the function budget.
+  const beat = (extra: object) => q`
+    INSERT INTO ipo (slug, company, status, data)
+    VALUES ('_pipeline_heartbeat', '_pipeline', 'listed', ${JSON.stringify({ at: new Date().toISOString(), nse: upcoming.length, live: live.length, updated, inserted, transitioned, ...extra })}::jsonb)
+    ON CONFLICT (slug) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
+  `;
+  await beat({ phase: "sync-done", docsParsed: 0, listingsFixed: 0, newsCached: 0, timedOut: false });
+
   let docsParsed = 0;
   let listingsFixed = 0;
   let newsCached = 0;
-  const DOC_BUDGET = 2;
+  const DOC_BUDGET = 1; // one deep-dive per run: RHP downloads alone can eat 30s+
   const LISTING_BUDGET = 5;
-  const DEADLINE = Date.now() + 45000; // leave headroom inside the 60s function limit
+  const DEADLINE = Date.now() + 40000; // leave headroom inside the 60s function limit
   let timedOut = false;
 
   for (const r of all) {
@@ -176,11 +185,7 @@ export async function GET(req: Request) {
     }
   }
 
-  await q`
-    INSERT INTO ipo (slug, company, status, data)
-    VALUES ('_pipeline_heartbeat', '_pipeline', 'listed', ${JSON.stringify({ at: new Date().toISOString(), nse: upcoming.length, live: live.length, updated, inserted, transitioned, docsParsed, listingsFixed, newsCached, timedOut })}::jsonb)
-    ON CONFLICT (slug) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
-  `;
+  await beat({ phase: "done", docsParsed, listingsFixed, newsCached, timedOut });
 
   return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, transitioned, docsParsed, listingsFixed, newsCached, timedOut });
 }
