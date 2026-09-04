@@ -3,6 +3,8 @@ import { dbReady, ensureIpoTable, sql } from "@/lib/db";
 import { refreshGmp } from "@/lib/gmp";
 import type { IpoSeed } from "@/lib/data";
 
+export const maxDuration = 60;
+
 function authed(req: Request): boolean {
   if (!process.env.CRON_SECRET) return true;
   const { searchParams } = new URL(req.url);

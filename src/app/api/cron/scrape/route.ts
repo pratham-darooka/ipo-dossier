@@ -7,6 +7,8 @@ import { resolveListing } from "@/lib/listings";
 import { ipoIntel } from "@/lib/tavily";
 import { IPOS, type IpoSeed } from "@/lib/data";
 
+export const maxDuration = 60;
+
 function authed(req: Request): boolean {
   if (!process.env.CRON_SECRET) return true;
   const { searchParams } = new URL(req.url);
@@ -114,8 +116,14 @@ export async function GET(req: Request) {
   let newsCached = 0;
   const DOC_BUDGET = 2;
   const LISTING_BUDGET = 5;
+  const DEADLINE = Date.now() + 45000; // leave headroom inside the 60s function limit
+  let timedOut = false;
 
   for (const r of all) {
+    if (Date.now() > DEADLINE) {
+      timedOut = true;
+      break;
+    }
     const d = r.data as IpoSeed & { docUrl?: string };
     let dirty = false;
 
@@ -170,9 +178,9 @@ export async function GET(req: Request) {
 
   await q`
     INSERT INTO ipo (slug, company, status, data)
-    VALUES ('_pipeline_heartbeat', '_pipeline', 'listed', ${JSON.stringify({ at: new Date().toISOString(), nse: upcoming.length, live: live.length, updated, inserted, transitioned, docsParsed, listingsFixed, newsCached })}::jsonb)
+    VALUES ('_pipeline_heartbeat', '_pipeline', 'listed', ${JSON.stringify({ at: new Date().toISOString(), nse: upcoming.length, live: live.length, updated, inserted, transitioned, docsParsed, listingsFixed, newsCached, timedOut })}::jsonb)
     ON CONFLICT (slug) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
   `;
 
-  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, transitioned, docsParsed, listingsFixed, newsCached });
+  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, transitioned, docsParsed, listingsFixed, newsCached, timedOut });
 }
