@@ -7,6 +7,8 @@ import type { IpoSeed } from "./data";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
 
+const BAD_URL = /chittorgarh\.com\/report\/|groww\.in\/blog|moneycontrol\.com\/news|indmoney\.com\/blog/i;
+
 async function tsearchPdfs(company: string): Promise<string[]> {
   const key = process.env.TAVILY_API_KEY;
   if (!key) return [];
@@ -18,18 +20,18 @@ async function tsearchPdfs(company: string): Promise<string[]> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         api_key: key,
-        query: `${company} IPO RHP red herring prospectus PDF`,
-        search_depth: "basic",
-        max_results: 8,
-        include_domains: ["sebi.gov.in", "bseindia.com", "nseindia.com", "chittorgarh.com"],
+        query: `${company} IPO RHP red herring prospectus PDF filetype:pdf`,
+        search_depth: "advanced",
+        max_results: 10,
+        include_domains: ["sebi.gov.in", "bseindia.com", "nseindia.com", "nsearchives.nseindia.com", "chittorgarh.com"],
       }),
       signal: ctrl.signal,
     });
     clearTimeout(t);
     if (!r.ok) return [];
     const j = (await r.json()) as { results?: { url?: string }[] };
-    const urls = (j.results ?? []).map((h) => h.url ?? "").filter(Boolean);
-    return [...urls.filter((u) => u.toLowerCase().includes(".pdf")), ...urls.filter((u) => !u.toLowerCase().includes(".pdf"))];
+    const urls = (j.results ?? []).map((h) => h.url ?? "").filter(Boolean).filter((u) => !BAD_URL.test(u));
+    return [...urls.filter((u) => /\.pdf(\?|$)/i.test(u) || /nsearchives|sebi\.gov\.in/i.test(u)), ...urls.filter((u) => !/\.pdf(\?|$)/i.test(u))];
   } catch {
     return [];
   }
@@ -78,13 +80,13 @@ export async function deepDiveDoc(company: string, docUrl: string): Promise<Part
     });
     clearTimeout(t);
     if (!r.ok) return null;
-    const len = Number(r.headers.get("content-length") || 0);
-    if (len > MAX_PDF_BYTES) return null;
+    const ct = r.headers.get("content-type") || "";
+    if (!/pdf/i.test(ct) && !/octet-stream/i.test(ct)) return null;
     const buf = Buffer.from(await r.arrayBuffer());
     if (buf.length > MAX_PDF_BYTES || buf.length < 1024) return null;
     await fs.writeFile(tmp, buf);
 
-    const { text } = await extractText(buf);
+    const { text } = await extractText(new Uint8Array(buf));
     const full = (Array.isArray(text) ? text.join("\n") : String(text)).slice(0, 60000);
     if (full.trim().length < 2000) return null; // scanned-image PDF — OCR explicitly out of scope
 

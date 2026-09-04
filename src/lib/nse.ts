@@ -45,8 +45,9 @@ async function nseJson(url: string): Promise<unknown> {
 
 function parseBand(s: string | undefined): [number | null, number | null] {
   if (!s) return [null, null];
-  const nums = s.replace(/,/g, "").match(/[\d.]+/g)?.map(Number) ?? [];
-  if (nums.length >= 2) return [nums[0], nums[1]];
+  // NOTE: require a leading digit — /[\d.]+/ would swallow the dot in "Rs.168" (-> 0.168).
+  const nums = s.replace(/,/g, "").match(/\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+  if (nums.length >= 2) return [nums[0], nums[nums.length - 1]];
   if (nums.length === 1) return [nums[0], nums[0]];
   return [null, null];
 }

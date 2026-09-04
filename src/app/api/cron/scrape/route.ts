@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { dbReady, ensureIpoTable, sql } from "@/lib/db";
 import { fetchNseLive, fetchNseUpcoming, normName, nseStatusToOurs, slugify, type NseLive } from "@/lib/nse";
+import { fetchChittorgarhForthcoming } from "@/lib/chittorgarh";
 import { nseToPartial } from "@/lib/ipos";
 import { deepDiveDoc, resolveDocUrl } from "@/lib/docs";
 import { resolveListing } from "@/lib/listings";
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
   }
   const enrich = sp.get("stage") !== "sync"; // ?stage=sync skips enrichment
 
-  const [upcoming, live] = await Promise.all([fetchNseUpcoming(), fetchNseLive()]);
+  const [upcoming, live, forthcoming] = await Promise.all([fetchNseUpcoming(), fetchNseLive(), fetchChittorgarhForthcoming()]);
   const liveBySymbol = new Map(live.map((l) => [l.symbol, l]));
   const liveByName = new Map(live.map((l) => [normName(l.company), l]));
 
@@ -96,6 +97,29 @@ export async function GET(req: Request) {
     }
   }
 
+  // --- 1a. Forthcoming board (Chittorgarh): names NSE hasn't listed yet -> upcoming partials ---
+  let forthcomingNew = 0;
+  for (const f of forthcoming) {
+    const key = normName(f.company);
+    const already = [...bySlug.values()].some((r) => normName(r.company) === key);
+    if (already) continue;
+    const slug = slugify(f.company);
+    if (bySlug.has(slug)) continue;
+    const base = nseToPartial(
+      { symbol: "", company: f.company, openDate: f.openDate, closeDate: f.closeDate, priceMin: null, priceMax: null, issueSizeShares: null, status: "" },
+      undefined,
+      "upcoming"
+    );
+    base.slug = slug;
+    await q`
+      INSERT INTO ipo (slug, company, status, data)
+      VALUES (${slug}, ${f.company}, 'upcoming', ${JSON.stringify(base)}::jsonb)
+      ON CONFLICT (slug) DO NOTHING
+    `;
+    bySlug.set(slug, { slug, company: f.company, status: "upcoming", data: base });
+    forthcomingNew++;
+  }
+
   // --- 1b. Stale-close transition: rows NSE no longer lists whose window shut -> listed ---
   const feedNames = new Set(upcoming.map((u) => normName(u.company)));
   const today = new Date().toISOString().slice(0, 10);
@@ -127,7 +151,7 @@ export async function GET(req: Request) {
   // enrichment later exhausts the function budget.
   const beat = (extra: object) => q`
     INSERT INTO ipo (slug, company, status, data)
-    VALUES ('_pipeline_heartbeat', '_pipeline', 'listed', ${JSON.stringify({ at: new Date().toISOString(), nse: upcoming.length, live: live.length, updated, inserted, transitioned, ...extra })}::jsonb)
+    VALUES ('_pipeline_heartbeat', '_pipeline', 'listed', ${JSON.stringify({ at: new Date().toISOString(), nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, ...extra })}::jsonb)
     ON CONFLICT (slug) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
   `;
   await beat({ phase: "sync-done", docsParsed: 0, listingsFixed: 0, newsCached: 0, timedOut: false });
@@ -160,18 +184,30 @@ export async function GET(req: Request) {
 
     // Doc deep-dive for partial live/upcoming rows
     if (docsParsed < DOC_BUDGET && (r.status === "live" || r.status === "upcoming") && (d.financials?.length ?? 0) === 0) {
-      const url = d.docUrl ?? (await resolveDocUrl(d.company));
-      if (url) {
-        if (!d.docUrl) {
-          (d as Record<string, unknown>).docUrl = url;
+      const dd = d as IpoSeed & { docUrl?: string; docTries?: number };
+      if ((dd.docTries ?? 0) >= 3) {
+        // tried enough — wait for new filings to appear
+      } else {
+        if (dd.docUrl && /chittorgarh\.com\/report\/|groww\.in\/blog|moneycontrol\.com\/news|indmoney\.com\/blog/i.test(dd.docUrl)) {
+          delete dd.docUrl;
           dirty = true;
         }
-        const patch = await deepDiveDoc(d.company, url);
-        if (patch && Object.keys(patch).length) {
-          Object.assign(d, patch);
-          d.partial = (d.financials?.length ?? 0) === 0;
-          docsParsed++;
-          dirty = true;
+        const url = dd.docUrl ?? (await resolveDocUrl(d.company));
+        if (url) {
+          if (!dd.docUrl) {
+            dd.docUrl = url;
+            dirty = true;
+          }
+          const patch = await deepDiveDoc(d.company, url);
+          if (patch && Object.keys(patch).length) {
+            Object.assign(d, patch);
+            d.partial = (d.financials?.length ?? 0) === 0;
+            docsParsed++;
+            dirty = true;
+          } else {
+            dd.docTries = (dd.docTries ?? 0) + 1;
+            dirty = true;
+          }
         }
       }
     }
@@ -199,5 +235,5 @@ export async function GET(req: Request) {
 
   await beat({ phase: "done", docsParsed, listingsFixed, newsCached, timedOut });
 
-  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, transitioned, docsParsed, listingsFixed, newsCached, timedOut });
+  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, timedOut });
 }

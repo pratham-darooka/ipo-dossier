@@ -5,7 +5,12 @@ export const SITE_URL = "https://ipo-dossier.vercel.app";
 export const SITE_NAME = "IPO Dossier";
 
 /** Single source for visible FAQs AND FAQPage schema (no drift). */
-export function ipoFaqs(ipo: IpoSeed, l: number, lt: number, growth: number, margin: number, hasFin: boolean): [string, string][] {
+export function ipoFaqs(ipo: IpoSeed, l: number, lt: number, growth: number, margin: number, finYears: number): [string, string][] {
+  const longTerm = finYears >= 3
+    ? lt >= 7 ? `The business screens well: ${growth}% revenue CAGR, ${margin}% margins, cash-backed profits. Worth a deeper look.` : `Not yet — wait for cheaper re-entry or cleaner quarters.`
+    : finYears >= 1
+      ? `Early filing data is in (${finYears} yr so far) — enough to start tracking, not enough for a final call. Watch this dossier fill out.`
+      : `The filing dossier is still building; don't size a long-term bet until financials land here.`;
   return [
     [
       `Should I apply for the ${ipo.company} IPO for listing gains?`,
@@ -15,9 +20,7 @@ export function ipoFaqs(ipo: IpoSeed, l: number, lt: number, growth: number, mar
     ],
     [
       `Is ${ipo.company} good for the long term?`,
-      hasFin
-        ? lt >= 7 ? `The business screens well: ${growth}% revenue CAGR, ${margin}% margins, cash-backed profits. Worth a deeper look.` : `Not yet — wait for cheaper re-entry or cleaner quarters.`
-        : `The filing dossier is still building; don't size a long-term bet until financials land here.`,
+      longTerm,
     ],
     [
       `What is the ${ipo.company} IPO price band and lot size?`,

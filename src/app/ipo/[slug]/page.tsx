@@ -45,11 +45,13 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
   if (!ipo) notFound();
 
   const f = ipo.financials;
-  const hasFin = f.length >= 3;
-  const growth = hasFin ? Math.round(((f[2].revenueCr / f[0].revenueCr) ** 0.5 - 1) * 100) : 0;
-  const margin = hasFin && f[2].revenueCr ? Math.round((f[2].patCr / f[2].revenueCr) * 100) : 0;
+  const last = f[f.length - 1];
+  const hasFin = f.length >= 1; // display whatever years the deep-dive has captured
+  const hasFullFin = f.length >= 3; // full scoring depth
+  const growth = f.length >= 2 && f[0].revenueCr ? Math.round(((last.revenueCr / f[0].revenueCr) ** (1 / (f.length - 1)) - 1) * 100) : 0;
+  const margin = last && last.revenueCr ? Math.round((last.patCr / last.revenueCr) * 100) : 0;
   const l = scoreListing({ subscriptionTotal: ipo.subscription.total || undefined, qib: ipo.subscription.qib || undefined, gmpPct: ipo.gmp.pct || undefined, anchorPct: ipo.anchorPct || undefined, freshIssuePct: ipo.freshIssuePct || undefined });
-  const lt = scoreLongTerm({ revenueGrowth3y: hasFin ? growth : undefined, patMargin: hasFin ? margin : undefined, cfoVsPat: hasFin && f[2].patCr ? f[2].cfoCr / f[2].patCr : undefined, redFlags: ipo.risks.length || undefined, freshIssuePct: ipo.freshIssuePct || undefined });
+  const lt = scoreLongTerm({ revenueGrowth3y: hasFullFin ? growth : undefined, patMargin: hasFullFin ? margin : undefined, cfoVsPat: hasFullFin && last.patCr ? last.cfoCr / last.patCr : undefined, redFlags: ipo.risks.length || undefined, freshIssuePct: ipo.freshIssuePct || undefined });
 
   const fallback = {
     listing: { score: l.score, verdict: verdict(l.score), reasons: l.reasons.length ? l.reasons : ["NSE demand data only so far — watch Day-1 QIB"], action: l.score >= 7 ? "Apply 1 lot; book 50% on listing pop, trail rest at cost." : l.score >= 5 ? "Apply only if QIB crosses 5x by Day 2, else skip." : "Skip for listing — weak demand setup." },
@@ -61,7 +63,7 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
   };
 
   const maxSub = Math.max(ipo.subscription.qib, ipo.subscription.nii, ipo.subscription.retail, 1);
-  const faqs = ipoFaqs(ipo, l.score, lt.score, growth, margin, hasFin);
+  const faqs = ipoFaqs(ipo, l.score, lt.score, growth, margin, f.length);
   void getAllIpos;
 
   return (
@@ -189,7 +191,7 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
           </table>
           <div className="mt-3 grid gap-2 md:grid-cols-3 text-sm">
             <div className="rounded-2xl bg-black/5 dark:bg-white/5 p-3">📈 3-yr revenue CAGR <b>{growth}%</b></div>
-            <div className="rounded-2xl bg-black/5 dark:bg-white/5 p-3">💰 PAT margin <b>{margin}%</b> · CFO/PAT <b>{(f[2].cfoCr / f[2].patCr).toFixed(2)}x</b></div>
+            <div className="rounded-2xl bg-black/5 dark:bg-white/5 p-3">💰 PAT margin <b>{margin}%</b>{hasFullFin && last.patCr ? <> · CFO/PAT <b>{(last.cfoCr / last.patCr).toFixed(2)}x</b></> : null}</div>
             <div className="rounded-2xl bg-black/5 dark:bg-white/5 p-3">⚖️ Peers → {ipo.peers.length ? ipo.peers.slice(1).map((p) => `${p.name} ${p.pe}x`).join(" · ") : "—"}</div>
           </div>
         </section>
