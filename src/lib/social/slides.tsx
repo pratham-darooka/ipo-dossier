@@ -36,7 +36,7 @@ export function Frame({ children, foot }: { children: ReactNode; foot: string })
             fontWeight: 900,
           }}
         >
-          {"»"}
+          D
         </div>
         <div style={{ fontSize: 26, letterSpacing: 5, color: "#D4FF4F", fontWeight: 700 }}>IPO DOSSIER</div>
       </div>
@@ -63,7 +63,8 @@ function Pill({ children, bg, fg }: { children: ReactNode; bg: string; fg: strin
   return (
     <span
       style={{
-        display: "inline-block",
+        display: "flex",
+        alignSelf: "flex-start",
         background: bg,
         color: fg,
         borderRadius: 999,
@@ -121,10 +122,10 @@ export function CoverSlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: number
   const { l, lt, vl, vlt } = ipoScores(ipo);
   return (
     <Frame foot={`SLIDE ${n}/${of} · MAINBOARD · NSE BSE`}>
-      <div style={{ fontSize: 30, color: "#8A94A6", letterSpacing: 3 }}>{ipo.sector.toUpperCase()} · {ipo.status.toUpperCase()}</div>
+      <div style={{ fontSize: 30, color: "#8A94A6", letterSpacing: 3 }}>{`${ipo.sector.toUpperCase()} · ${ipo.status.toUpperCase()}`}</div>
       <div style={{ fontSize: 92, fontWeight: 900, lineHeight: 1.02, marginTop: 18 }}>{ipo.company}</div>
-      <div style={{ fontSize: 40, marginTop: 22, color: "#E8E8E8" }}>
-        {ipo.priceMax > 0 ? `₹${ipo.priceMin}–₹${ipo.priceMax}  ·  Lot ${ipo.lotSize || "—"}` : "Price band awaited"}
+      <div style={{ fontSize: 40, marginTop: 22, color: "#E8E8E8", display: "flex", flexWrap: "wrap" }}>
+        {ipo.priceMax > 0 ? <span>₹{ipo.priceMin}–₹{ipo.priceMax}  ·  Lot {ipo.lotSize || "—"}</span> : <span>Price band awaited</span>}
       </div>
       <div style={{ display: "flex", gap: 20, marginTop: 44 }}>
         <Pill bg="#FFFFFF" fg="#080A0F">
@@ -145,19 +146,19 @@ export function DemandSlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: numbe
   const max = Math.max(s.qib, s.nii, s.retail, 1);
   return (
     <Frame foot={`SLIDE ${n}/${of} · LIVE NSE DEMAND`}>
-      <div style={{ fontSize: 64, fontWeight: 900 }}>Who{"'"}s actually bidding?</div>
+      <div style={{ fontSize: 64, fontWeight: 900 }}>{`Who's actually bidding?`}</div>
       <div style={{ fontSize: 32, color: "#8A94A6", marginTop: 8 }}>QIB is smart money. Watch it converge.</div>
-      <div style={{ marginTop: 20 }}>
+      <div style={{ display: "flex", flexDirection: "column", marginTop: 20 }}>
         <Bar label="QIB (institutions)" value={s.qib} max={max} />
         <Bar label="NII (HNI)" value={s.nii} max={max} />
         <Bar label="Retail (you)" value={s.retail} max={max} />
       </div>
       <div style={{ display: "flex", gap: 20, marginTop: 44, fontSize: 36 }}>
-        <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 20, padding: "20px 30px" }}>
-          TOTAL <b>{s.total > 0 ? `${s.total}x` : "Not open"}</b>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.08)", borderRadius: 20, padding: "20px 30px" }}>
+          <span>TOTAL</span><b>{s.total > 0 ? `${s.total}x` : "Not open"}</b>
         </div>
-        <div style={{ background: "rgba(255,255,255,0.08)", borderRadius: 20, padding: "20px 30px" }}>
-          GMP <b>{ipo.gmp.pct > 0 ? `+${ipo.gmp.pct}%` : "—"}</b>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.08)", borderRadius: 20, padding: "20px 30px" }}>
+          <span>GMP</span><b>{ipo.gmp.pct > 0 ? `+${ipo.gmp.pct}%` : "—"}</b>
         </div>
       </div>
     </Frame>
@@ -168,18 +169,16 @@ export function DemandSlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: numbe
 export function MoneySlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: number }) {
   const f = ipo.financials.slice(-3);
   const maxRev = Math.max(...f.map((r) => r.revenueCr), 1);
+  const sub = `${ipo.issueSizeCr > 0 ? `Issue ₹${ipo.issueSizeCr} Cr · ` : ""}${ipo.freshIssuePct > 0 ? `${ipo.freshIssuePct}% fresh capital` : "Structure awaited"}`;
   return (
     <Frame foot={`SLIDE ${n}/${of} · WHERE THE MONEY GOES`}>
       <div style={{ fontSize: 64, fontWeight: 900 }}>Follow the money</div>
-      <div style={{ fontSize: 34, marginTop: 12 }}>
-        {ipo.issueSizeCr > 0 ? `Issue ₹${ipo.issueSizeCr} Cr · ` : ""}
-        {ipo.freshIssuePct > 0 ? `${ipo.freshIssuePct}% fresh capital` : "Structure awaited"}
-      </div>
+      <div style={{ fontSize: 34, marginTop: 12 }}>{sub}</div>
       {f.length > 0 ? (
         <div style={{ display: "flex", gap: 24, marginTop: 36, alignItems: "flex-end" }}>
           {f.map((r) => (
             <div key={r.fy} style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: 1 }}>
-              <div style={{ fontSize: 30, fontWeight: 900 }}>₹{r.revenueCr} Cr</div>
+              <div style={{ fontSize: 30, fontWeight: 900 }}>{`₹${r.revenueCr} Cr`}</div>
               <div
                 style={{
                   width: "100%",
@@ -189,7 +188,7 @@ export function MoneySlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: number
                   marginTop: 12,
                 }}
               />
-              <div style={{ fontSize: 28, color: "#8A94A6", marginTop: 10 }}>{r.fy} · PAT ₹{r.patCr} Cr</div>
+              <div style={{ fontSize: 28, color: "#8A94A6", marginTop: 10 }}>{`${r.fy} · PAT ₹${r.patCr} Cr`}</div>
             </div>
           ))}
         </div>
@@ -197,7 +196,7 @@ export function MoneySlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: number
         <div style={{ fontSize: 34, color: "#8A94A6", marginTop: 36 }}>Restated financials attach here the day the RHP drops.</div>
       )}
       {ipo.objectsOfIssue.length > 0 && (
-        <div style={{ fontSize: 30, marginTop: 30, color: "#E8E8E8" }}>→ {ipo.objectsOfIssue[0].slice(0, 90)}</div>
+        <div style={{ fontSize: 30, marginTop: 30, color: "#E8E8E8" }}>{`→ ${ipo.objectsOfIssue[0].slice(0, 90)}`}</div>
       )}
     </Frame>
   );
@@ -211,25 +210,25 @@ export function VerdictSlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: numb
     <Frame foot={`SLIDE ${n}/${of} · TWO VERDICTS, NO TIPS`}>
       <div style={{ fontSize: 64, fontWeight: 900 }}>Our take</div>
       <div style={{ display: "flex", gap: 24, marginTop: 28 }}>
-        <div style={{ flex: 1, background: "rgba(212,255,79,0.1)", borderRadius: 24, padding: 30 }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "rgba(212,255,79,0.1)", borderRadius: 24, padding: 30 }}>
           <div style={{ fontSize: 26, color: "#D4FF4F", fontWeight: 800 }}>LISTING TRADER</div>
-          <div style={{ fontSize: 54, fontWeight: 900, marginTop: 6 }}>
-            {vl} <span style={{ fontSize: 32 }}>{l.score.toFixed(1)}/10</span>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12, fontSize: 54, fontWeight: 900, marginTop: 6 }}>
+            <span>{vl}</span><span style={{ fontSize: 32 }}>{l.score.toFixed(1)}/10</span>
           </div>
           {top(l.reasons).map((r) => (
             <div key={r} style={{ fontSize: 27, marginTop: 10, color: "#E8E8E8" }}>
-              ▸ {r.slice(0, 90)}
+              {`> ${r.slice(0, 90)}`}
             </div>
           ))}
         </div>
-        <div style={{ flex: 1, background: "rgba(232,193,90,0.1)", borderRadius: 24, padding: 30 }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, background: "rgba(232,193,90,0.1)", borderRadius: 24, padding: 30 }}>
           <div style={{ fontSize: 26, color: "#E8C15A", fontWeight: 800 }}>LONG-TERM</div>
-          <div style={{ fontSize: 54, fontWeight: 900, marginTop: 6 }}>
-            {vlt} <span style={{ fontSize: 32 }}>{lt.score.toFixed(1)}/10</span>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 12, fontSize: 54, fontWeight: 900, marginTop: 6 }}>
+            <span>{vlt}</span><span style={{ fontSize: 32 }}>{lt.score.toFixed(1)}/10</span>
           </div>
           {top(lt.reasons).map((r) => (
             <div key={r} style={{ fontSize: 27, marginTop: 10, color: "#E8E8E8" }}>
-              ▸ {r.slice(0, 90)}
+              {`> ${r.slice(0, 90)}`}
             </div>
           ))}
         </div>
@@ -283,7 +282,7 @@ export type Evergreen = {
 export function EvergreenCover({ post, n, of }: { post: Evergreen; n: number; of: number }) {
   return (
     <Frame foot={`SLIDE ${n}/${of} · ${post.pillar.toUpperCase()} · ${post.level.toUpperCase()}`}>
-      <div style={{ display: "inline-block", background: "#D4FF4F", color: "#080A0F", borderRadius: 999, padding: "10px 26px", fontSize: 28, fontWeight: 800, alignSelf: "flex-start" }}>
+      <div style={{ display: "flex", background: "#D4FF4F", color: "#080A0F", borderRadius: 999, padding: "10px 26px", fontSize: 28, fontWeight: 800, alignSelf: "flex-start" }}>
         {post.pillar}
       </div>
       <div style={{ fontSize: 84, fontWeight: 900, lineHeight: 1.05, marginTop: 24 }}>{post.cover}</div>

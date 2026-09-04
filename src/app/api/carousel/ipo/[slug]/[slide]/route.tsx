@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { findIpo } from "@/lib/ipos";
 import { IPO_SLIDES, W, H } from "@/lib/social/slides";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 // GET /api/carousel/ipo/[slug]/[slide] — 1080x1350 PNG, slides 1..5
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string; slide: string }> }) {

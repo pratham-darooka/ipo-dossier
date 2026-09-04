@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import { getEvergreen } from "@/lib/social/evergreen";
 import { EVERGREEN_SLIDES, W, H } from "@/lib/social/slides";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 
 // GET /api/carousel/evergreen/[id]/[slide] — 1080x1350 PNG, slides 1..3
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string; slide: string }> }) {
