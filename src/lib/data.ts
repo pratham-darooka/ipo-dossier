@@ -18,6 +18,7 @@ export type IpoSeed = {
   partial?: boolean; syncedAt?: string; symbol?: string;
   // Past-IPO facts (listing day truth).
   listingPrice?: number; listingGainPct?: number;
+  listingDay?: { open: number; high: number; low: number; close: number };
   // Web intel (Tavily, cached — never fetched per page-view).
   news?: { title: string; url: string; publishedDate?: string }[];
 };

@@ -115,6 +115,11 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
                 ({(ipo.listingGainPct ?? 0) > 0 ? "+" : ""}{ipo.listingGainPct}%)
               </span>
             </div>
+            {ipo.listingDay && (
+              <div className="mt-2 font-mono2 text-xs opacity-60">
+                DAY RANGE ₹{ipo.listingDay.low} – ₹{ipo.listingDay.high} · CLOSED ₹{ipo.listingDay.close}
+              </div>
+            )}
           </div>
           <Link href="/performance" className="ml-auto rounded-full border border-white/15 px-5 py-2.5 text-sm font-bold hover:bg-white/5">Full GMP-vs-actual ledger →</Link>
         </section>
