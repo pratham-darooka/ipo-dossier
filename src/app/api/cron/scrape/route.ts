@@ -7,6 +7,7 @@ import { resolveListing } from "@/lib/listings";
 import { ipoIntel } from "@/lib/tavily";
 import { IPOS, type IpoSeed } from "@/lib/data";
 
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 function authed(req: Request): boolean {
@@ -53,9 +54,12 @@ export async function GET(req: Request) {
     const liveHit: NseLive | undefined = liveBySymbol.get(u.symbol) ?? liveByName.get(key);
     const status = nseStatusToOurs(u.status, u.closeDate);
     const seedMatch = seedByName.get(key);
-    const resolvedSlug = [...bySlug.values()].find((r) => normName(r.company) === key)?.slug
+    let resolvedSlug = [...bySlug.values()].find((r) => normName(r.company) === key)?.slug
       ?? seedMatch?.slug
-      ?? slugify(`${u.company} ${u.symbol}`);
+      ?? slugify(u.company);
+    if (!bySlug.has(resolvedSlug) && resolvedSlug !== seedMatch?.slug && [...bySlug.keys()].includes(resolvedSlug)) {
+      resolvedSlug = `${resolvedSlug}-${u.symbol.toLowerCase()}`;
+    }
 
     const prev = bySlug.get(resolvedSlug);
     const base: IpoSeed = prev

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getAllIpos } from "@/lib/ipos";
 
+export const revalidate = 300; // live-ish list, still edge-cached
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
