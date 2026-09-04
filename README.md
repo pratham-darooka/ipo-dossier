@@ -19,7 +19,7 @@ npm run dev             # http://localhost:3000
 ## How data flows (automated OSINT)
 
 - `src/lib/scrapers/` → NSE upcoming-issues API, Chittorgarh dashboard, GMP aggregators (unofficial, timestamped), SEBI pipeline
-- `GET /api/cron/scrape` → merges + upserts to Neon (`vercel.json` cron: every 30min market hours + daily full)
+- `GET /api/cron/scrape` → merges + upserts to Neon (`vercel.json` cron: daily 8am IST on Hobby; tighten to 30min market-hours on Pro)
 - `GET /api/ipos?status=live` → Neon when `DATABASE_URL` works, else realistic seed fallback (`src/lib/data.ts`)
 - `POST /api/ai/analyze {slug}` → deterministic scores first (`src/lib/scoring.ts`), then Groq `openai/gpt-oss-120b` narrative grounded on filing JSON only
 
