@@ -1,25 +1,37 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { IPOS, minInvestment } from "@/lib/data";
+import { minInvestment, type IpoSeed } from "@/lib/data";
 import { Reveal } from "@/components/reveal";
+import { useIpos } from "@/components/use-ipos";
+
+function margin(ipo: IpoSeed) {
+  const f = ipo.financials[2];
+  if (!f?.revenueCr) return "—";
+  return `${((f.patCr / f.revenueCr) * 100).toFixed(1)}%`;
+}
+function roe(ipo: IpoSeed) {
+  const f = ipo.financials[2];
+  return f ? `${f.roe}%` : "—";
+}
 
 export default function ComparePage() {
+  const IPOS = useIpos();
   const [a, setA] = useState(IPOS[0].slug);
-  const [b, setB] = useState(IPOS[1].slug);
-  const A = useMemo(() => IPOS.find((i) => i.slug === a)!, [a]);
-  const B = useMemo(() => IPOS.find((i) => i.slug === b)!, [b]);
+  const [b, setB] = useState(IPOS[1]?.slug ?? IPOS[0].slug);
+  const A = useMemo(() => IPOS.find((i) => i.slug === a) ?? IPOS[0], [IPOS, a]);
+  const B = useMemo(() => IPOS.find((i) => i.slug === b) ?? IPOS[1] ?? IPOS[0], [IPOS, b]);
 
   const rows: [string, string | number, string | number, string?][] = [
-    ["Issue size", `₹${A.issueSizeCr} Cr`, `₹${B.issueSizeCr} Cr`],
-    ["Price band", `₹${A.priceMin}–₹${A.priceMax}`, `₹${B.priceMin}–₹${B.priceMax}`],
-    ["Min investment", `₹${minInvestment(A).toLocaleString("en-IN")}`, `₹${minInvestment(B).toLocaleString("en-IN")}`],
+    ["Issue size", A.issueSizeCr ? `₹${A.issueSizeCr} Cr` : "—", B.issueSizeCr ? `₹${B.issueSizeCr} Cr` : "—"],
+    ["Price band", A.priceMax ? `₹${A.priceMin}–₹${A.priceMax}` : "Awaited", B.priceMax ? `₹${B.priceMin}–₹${B.priceMax}` : "Awaited"],
+    ["Min investment", A.lotSize ? `₹${minInvestment(A).toLocaleString("en-IN")}` : "—", B.lotSize ? `₹${minInvestment(B).toLocaleString("en-IN")}` : "—"],
     ["Fresh issue", `${A.freshIssuePct}%`, `${B.freshIssuePct}%`, A.freshIssuePct > B.freshIssuePct ? "A funds more growth" : B.freshIssuePct > A.freshIssuePct ? "B funds more growth" : "Tie"],
     ["QIB / Total sub", `${A.subscription.qib}x / ${A.subscription.total}x`, `${B.subscription.qib}x / ${B.subscription.total}x`, A.subscription.qib > B.subscription.qib ? "A has smarter money" : "B has smarter money"],
-    ["GMP", `+${A.gmp.pct}%`, `+${B.gmp.pct}%`, A.gmp.pct > B.gmp.pct ? "A hotter (crowded)" : "B hotter (crowded)"],
-    ["PAT margin FY26", `${((A.financials[2].patCr / A.financials[2].revenueCr) * 100).toFixed(1)}%`, `${((B.financials[2].patCr / B.financials[2].revenueCr) * 100).toFixed(1)}%`],
-    ["ROE", `${A.financials[2].roe}%`, `${B.financials[2].roe}%`],
-    ["Promoter post", `${A.promoterPost}%`, `${B.promoterPost}%`],
+    ["GMP", A.gmp.pct ? `+${A.gmp.pct}%` : "—", B.gmp.pct ? `+${B.gmp.pct}%` : "—", A.gmp.pct > B.gmp.pct ? "A hotter (crowded)" : "B hotter (crowded)"],
+    ["PAT margin", margin(A), margin(B)],
+    ["ROE", roe(A), roe(B)],
+    ["Promoter post", A.promoterPost ? `${A.promoterPost}%` : "—", B.promoterPost ? `${B.promoterPost}%` : "—"],
   ];
 
   const pick = (v: string, set: (s: string) => void) => (

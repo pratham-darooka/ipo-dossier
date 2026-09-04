@@ -1,7 +1,7 @@
-import { IPOS } from "@/lib/data";
+import type { IpoSeed } from "@/lib/data";
 
-export function TickerTape() {
-  const items = IPOS.map((i) => ({
+export function TickerTape({ ipos }: { ipos: IpoSeed[] }) {
+  const items = ipos.map((i) => ({
     name: i.company.split(" ")[0],
     gmp: `+${i.gmp.pct}%`,
     up: i.gmp.pct >= 0,

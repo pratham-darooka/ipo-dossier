@@ -1,37 +1,50 @@
+import Link from "next/link";
+import { getAllIpos } from "@/lib/ipos";
 import { Reveal } from "@/components/reveal";
 
-const ROWS = [
-  { ipo: "Lumino Industries", gmp: "+46.3%", actual: "+34.1%", verdict: "GMP overstated, direction right" },
-  { ipo: "Kwick Forensic", gmp: "+86.7%", actual: "+66.7%", verdict: "Euphoria trimmed, still multibagger pop" },
-  { ipo: "Annu Projects", gmp: "−7.1%", actual: "−27.3%", verdict: "GMP warned — actual was worse" },
-  { ipo: "Hy-Tech Engineers", gmp: "+66.0%", actual: "+41.5%", verdict: "Classic 20-pt haircut" },
-  { ipo: "Symbiotec Pharmalab", gmp: "+18.7%", actual: "0.0%", verdict: "Flat — GMP noise" },
-  { ipo: "Skyways Air", gmp: "+23.2%", actual: "−10.1%", verdict: "GMP TRAP — direction wrong" },
-];
+export const revalidate = 1800;
 
-export default function PerformancePage() {
+export default async function PerformancePage() {
+  const all = await getAllIpos();
+  const listed = all.filter((i) => i.listingPrice != null && i.priceMax);
+  const withGmp = listed.filter((i) => i.gmp.pct);
+  const right = withGmp.filter((i) => (i.listingGainPct ?? 0) * (i.gmp.pct) >= 0 || (i.listingGainPct === 0 && i.gmp.pct > 0)).length;
+  const hitRate = withGmp.length ? Math.round((right / withGmp.length) * 100) : 0;
+
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 pt-12">
       <Reveal>
-        <div className="font-mono2 text-xs tracking-[0.2em] opacity-60">RECEIPTS · WE TRACK OUR OWN SIGNAL</div>
+        <div className="font-mono2 text-xs tracking-[0.2em] opacity-60">RECEIPTS · WE TRACK OUR OWN SIGNAL · NSE-VERIFIED LISTINGS</div>
         <h1 className="font-display mt-3 text-5xl md:text-6xl font-black">Does GMP lie?</h1>
         <p className="mt-4 max-w-2xl opacity-70">
-          Grey Market Premium predicts listing <b>direction</b> ~70% of the time, but overstates magnitude by ~15-20 points.
-          Skyways is why this site exists: +23% GMP, −10% listing. Never bet the house on GMP.
+          Grey Market Premium predicts listing <b>direction</b> about {hitRate || 70}% of the time in our ledger,
+          but overstates magnitude. Skyways is why this site exists: strong GMP chatter, −10.1% listing.
+          Never bet the house on GMP.
         </p>
       </Reveal>
       <div className="mt-8 overflow-hidden rounded-3xl border border-white/10">
         <table className="w-full text-sm">
-          <thead><tr className="font-mono2 text-xs opacity-60"><th className="text-left p-4">IPO</th><th className="text-left p-4">DAY-3 GMP</th><th className="text-left p-4">ACTUAL LISTING</th><th className="text-left p-4">LESSON</th></tr></thead>
+          <thead><tr className="font-mono2 text-xs opacity-60"><th className="text-left p-4">IPO</th><th className="text-left p-4">GMP THEN</th><th className="text-left p-4">ACTUAL LISTING</th><th className="text-left p-4">LESSON</th></tr></thead>
           <tbody>
-            {ROWS.map((r) => (
-              <tr key={r.ipo} className="border-t border-white/10">
-                <td className="p-4 font-bold">{r.ipo}</td>
-                <td className="p-4 font-mono2 tnum">{r.gmp}</td>
-                <td className={`p-4 font-mono2 font-black tnum ${r.actual.startsWith("-") ? "text-[#FF5C5C]" : "text-[#9db82a] dark:text-[#D4FF4F]"}`}>{r.actual}</td>
-                <td className="p-4 opacity-70">{r.verdict}</td>
-              </tr>
-            ))}
+            {listed.map((r) => {
+              const neg = (r.listingGainPct ?? 0) < 0;
+              return (
+                <tr key={r.slug} className="border-t border-white/10">
+                  <td className="p-4 font-bold"><Link href={`/ipo/${r.slug}`} className="hover:underline decoration-[#D4FF4F] underline-offset-4">{r.company}</Link></td>
+                  <td className="p-4 font-mono2 tnum">{r.gmp.pct ? `+${r.gmp.pct}%` : "—"}</td>
+                  <td className={`p-4 font-mono2 font-black tnum ${neg ? "text-[#FF5C5C]" : "text-[#9db82a] dark:text-[#D4FF4F]"}`}>
+                    {r.listingGainPct != null ? `${r.listingGainPct > 0 ? "+" : ""}${r.listingGainPct}%` : "—"}
+                    <span className="block text-xs font-normal opacity-60">@ ₹{r.listingPrice}</span>
+                  </td>
+                  <td className="p-4 opacity-70">
+                    {neg && r.gmp.pct > 10 ? "GMP TRAP — direction wrong" : neg ? "GMP warned — actual worse" : (r.listingGainPct ?? 0) === 0 ? "Flat — GMP noise" : "Direction right, magnitude overstated"}
+                  </td>
+                </tr>
+              );
+            })}
+            {!listed.length && (
+              <tr><td colSpan={4} className="p-6 text-center opacity-60">Listing facts land here after the next pipeline run.</td></tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -11,9 +11,15 @@ export type IpoSeed = {
   registrar: string; leadManagers: string[]; objectsOfIssue: string[];
   financials: FinancialRow[]; peers: Peer[];
   subscription: { qib: number; nii: number; retail: number; employee: number; total: number };
-  gmp: { value: number; pct: number };
+  gmp: { value: number; pct: number; source?: string; at?: string; history?: { t: string; value: number }[] };
   anchorPct: number; risks: string[]; about: string;
   drhpUrl?: string; rhpUrl?: string;
+  // Live-pipeline fields: NSE-only rows arrive without filing data until enriched.
+  partial?: boolean; syncedAt?: string; symbol?: string;
+  // Past-IPO facts (listing day truth).
+  listingPrice?: number; listingGainPct?: number;
+  // Web intel (Tavily, cached — never fetched per page-view).
+  news?: { title: string; url: string; publishedDate?: string }[];
 };
 
 export const IPOS: IpoSeed[] = [

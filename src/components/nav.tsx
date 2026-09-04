@@ -6,10 +6,11 @@ import { useTheme } from "next-themes";
 import { Moon, Sun, Search, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
-import { IPOS } from "@/lib/data";
+import { useIpos } from "@/components/use-ipos";
 
 const LINKS = [
   { href: "/", label: "Live" },
+  { href: "/brief", label: "Brief" },
   { href: "/calendar", label: "Calendar" },
   { href: "/compare", label: "Compare" },
   { href: "/performance", label: "GMP Truth" },
@@ -26,6 +27,7 @@ export function Nav() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
+  const IPOS = useIpos();
   const results = q ? IPOS.filter((i) => i.company.toLowerCase().includes(q.toLowerCase())).slice(0, 5) : [];
 
   return (

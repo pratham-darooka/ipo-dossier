@@ -1,13 +1,22 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowDown, ArrowUpRight, BadgeCheck, Scale, Telescope } from "lucide-react";
-import { IPOS } from "@/lib/data";
+import { getAllIpos } from "@/lib/ipos";
 import { TickerTape } from "@/components/ticker-tape";
 import { IpoCard } from "@/components/ipo-card";
 import { Reveal } from "@/components/reveal";
+import { SITE_URL } from "@/lib/seo";
 
 export const revalidate = 1800;
 
-export default function Home() {
+export const metadata: Metadata = {
+  title: "Live mainboard IPOs: GMP, subscription, verdicts",
+  description: "Track every live and upcoming mainboard IPO in India: NSE subscription multiples, GMP sentiment, DRHP forensics and apply-or-avoid verdicts.",
+  alternates: { canonical: SITE_URL },
+};
+
+export default async function Home() {
+  const IPOS = await getAllIpos();
   const live = IPOS.filter((i) => i.status === "live");
   const upcoming = IPOS.filter((i) => i.status === "upcoming");
   const listed = IPOS.filter((i) => i.status === "listed");
@@ -69,7 +78,7 @@ export default function Home() {
         </div>
       </section>
 
-      <TickerTape />
+      <TickerTape ipos={IPOS} />
 
       {/* LIVE */}
       <section id="live" className="mx-auto max-w-7xl px-4 sm:px-6 pt-14">

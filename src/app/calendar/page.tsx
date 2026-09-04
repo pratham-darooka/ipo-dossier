@@ -1,11 +1,12 @@
-import { IPOS } from "@/lib/data";
+import { getAllIpos } from "@/lib/ipos";
 import { Reveal } from "@/components/reveal";
 import Link from "next/link";
 import { fmtDate } from "@/lib/utils";
 
 export const revalidate = 1800;
 
-export default function CalendarPage() {
+export default async function CalendarPage() {
+  const IPOS = await getAllIpos();
   const sorted = [...IPOS].sort((a, b) => +new Date(a.openDate) - +new Date(b.openDate));
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 pt-12">

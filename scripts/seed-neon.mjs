@@ -22,12 +22,13 @@ await sql`
 await sql`CREATE INDEX IF NOT EXISTS ipo_status_idx ON ipo (status)`;
 
 for (const ipo of IPOS) {
+  // Insert-only: never clobber live NSE fields the cron pipeline maintains.
   await sql`
     INSERT INTO ipo (slug, company, status, data)
-    VALUES (${ipo.slug}, ${ipo.company}, ${ipo.status}, ${JSON.stringify(ipo)}::jsonb)
-    ON CONFLICT (slug) DO UPDATE SET company = EXCLUDED.company, status = EXCLUDED.status, data = EXCLUDED.data, updated_at = NOW()
+    VALUES (${ipo.slug}, ${ipo.company}, ${ipo.status}, ${JSON.stringify({ ...ipo, syncedAt: new Date().toISOString() })}::jsonb)
+    ON CONFLICT (slug) DO NOTHING
   `;
-  console.log("upserted", ipo.slug);
+  console.log("ensured", ipo.slug);
 }
 const count = await sql`SELECT count(*)::int AS n FROM ipo`;
 console.log("TOTAL ROWS:", count[0].n);

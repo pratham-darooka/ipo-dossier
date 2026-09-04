@@ -3,11 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Star } from "lucide-react";
-import { IPOS } from "@/lib/data";
+import { useIpos } from "@/components/use-ipos";
 
-const KEY = "hg-watchlist";
+const KEY = "ipo-dossier-watchlist";
 
 export default function WatchlistPage() {
+  const IPOS = useIpos();
   const [list, setList] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     try {
@@ -36,7 +37,7 @@ export default function WatchlistPage() {
               </button>
               <div className="flex-1">
                 <div className="font-bold">{ipo.company}</div>
-                <div className="font-mono2 text-xs opacity-60">₹{ipo.priceMin}–₹{ipo.priceMax} · GMP +{ipo.gmp.pct}%</div>
+                <div className="font-mono2 text-xs opacity-60">{ipo.priceMax ? `₹${ipo.priceMin}–₹${ipo.priceMax}` : "Band awaited"} · {ipo.gmp.pct ? `GMP +${ipo.gmp.pct}%` : `SUB ${ipo.subscription.total || "—"}x`}</div>
               </div>
               <Link href={`/ipo/${ipo.slug}`} className="text-sm font-bold underline decoration-[#D4FF4F] underline-offset-4">Dossier</Link>
             </div>
