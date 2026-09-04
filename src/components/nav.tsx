@@ -15,9 +15,7 @@ const LINKS = [
   { href: "/compare", label: "Compare" },
   { href: "/performance", label: "GMP Truth" },
   { href: "/watchlist", label: "Watchlist" },
-];
-
-export function Nav() {
+];export function Nav() {
   const path = usePathname();
   const { theme, setTheme } = useTheme();
   const [q, setQ] = useState("");
