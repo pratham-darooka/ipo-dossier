@@ -36,7 +36,11 @@ async function tsearch(query: string, maxResults = 5): Promise<{ title: string; 
 function parseListing(snippets: { content: string }[], priceMax: number): { price: number | null; gainPct: number | null } {
   for (const s of snippets) {
     // "listed at ₹465 ... 63% premium" / "debuted at Rs 131, up 35%" / "list at 10% discount"
-    const price = s.content.match(/(?:list(?:ed|ing)|debut)[^\d₹]{0,30}₹\s?([\d,]+(?:\.\d+)?)/i);
+    const m = s.content.match(/(?:list(?:ed|ing)|debut)[^\d₹]{0,30}₹\s?([\d,]+(?:\.\d+)?)/i);
+    if (!m || m.index == null) continue;
+    // Reject pre-listing ESTIMATES ("estimated listing price ₹195") — only actual debuts count.
+    if (/estimat/i.test(s.content.slice(Math.max(0, m.index - 60), m.index))) continue;
+    const price = m;
     const pct = s.content.match(/([+-]?\d+(?:\.\d+)?)\s?%\s?(?:premium|gain|higher|up|listing gain|discount)/i)
       ?? s.content.match(/(?:premium|gain|up|jumped|soared|discount)[^\d]{0,20}([+-]?\d+(?:\.\d+)?)\s?%/i);
     if (price) {

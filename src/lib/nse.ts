@@ -107,6 +107,7 @@ export async function fetchNseLive(): Promise<NseLive[]> {
 export function normName(s: string): string {
   return s
     .toLowerCase()
+    .replace(/\(.*?\)/g, " ") // parenthetical aliases: "(Mom's Belief)", "(India)", "(Manipal Cards)"
     .replace(/\b(limited|ltd|private|pvt|india|for profit social enterprise|fpse)\b|[().,‐-]/gi, " ")
     .replace(/\s+/g, " ")
     .trim();

@@ -5,6 +5,7 @@ import { fetchNseLive, fetchNseUpcoming, normName, nseStatusToOurs, slugify, typ
 import { fetchChittorgarhForthcoming } from "@/lib/chittorgarh";
 import { nseToPartial } from "@/lib/ipos";
 import { deepDiveDoc, resolveDocUrl } from "@/lib/docs";
+import { pressEnrich } from "@/lib/enrich";
 import { resolveListing } from "@/lib/listings";
 import { ipoIntel } from "@/lib/tavily";
 import { IPOS, type IpoSeed } from "@/lib/data";
@@ -150,7 +151,16 @@ export async function GET(req: Request) {
     slug: string; company: string; status: string; data: IpoSeed;
   }[];
   const rank = (s: string) => (s === "live" ? 0 : s === "upcoming" ? 1 : 2);
-  all.sort((a, b) => rank(a.status) - rank(b.status));
+  // T-2 guarantee: rows opening within 3 days go FIRST, always — no IPO may sit
+  // incomplete into its apply window. Everything else follows live -> upcoming -> listed.
+  const daysTo = (o?: string | null) => (o ? Math.ceil((new Date(o).getTime() - Date.now()) / 86400000) : 999);
+  all.sort((a, b) => {
+    const da = daysTo((a.data as IpoSeed).openDate);
+    const db = daysTo((b.data as IpoSeed).openDate);
+    const pa = da >= 0 && da <= 3 ? 0 : 1;
+    const pb = db >= 0 && db <= 3 ? 0 : 1;
+    return pa - pb || rank(a.status) - rank(b.status) || da - db;
+  });
 
   // Sync checkpoint first: NSE overlay + transitions are committed even if
   // enrichment later exhausts the function budget.
@@ -164,8 +174,11 @@ export async function GET(req: Request) {
   let docsParsed = 0;
   let listingsFixed = 0;
   let newsCached = 0;
+  let pressFilled = 0;
+  let tavilySpent = 0;
   const DOC_BUDGET = 1; // one deep-dive per run: RHP downloads alone can eat 30s+
   const LISTING_BUDGET = 5;
+  const PRESS_BUDGET = 12; // ~12 Tavily searches/run; steady-state spends ~0 (complete rows skip free)
   const DEADLINE = Date.now() + 40000; // leave headroom inside the 60s function limit
   let timedOut = false;
 
@@ -177,9 +190,23 @@ export async function GET(req: Request) {
     const d = r.data as IpoSeed & { docUrl?: string };
     let dirty = false;
 
+    // Press enrichment FIRST: best info available online, merged into empty fields only.
+    // This is what guarantees full dossiers by T-2 — RHP parses are an upgrade, not a gate.
+    if (tavilySpent < PRESS_BUDGET) {
+      const { patch, searches } = await pressEnrich(d);
+      tavilySpent += searches;
+      if (Object.keys(patch).length) {
+        Object.assign(d, patch);
+        d.partial = (d.financials?.length ?? 0) === 0;
+        pressFilled++;
+        dirty = true;
+      }
+    }
+
     // News intel for live rows (Tavily, cached on row)
     if (r.status === "live" && (!d.news?.length || (d.syncedAt && Date.now() - new Date(d.syncedAt).getTime() > 20 * 3600000))) {
       const intel = await ipoIntel(d.company);
+      tavilySpent += 2;
       if (intel.news.length) {
         d.news = intel.news.slice(0, 5).map((n) => ({ title: n.title, url: n.url, publishedDate: n.publishedDate }));
         newsCached++;
@@ -223,6 +250,7 @@ export async function GET(req: Request) {
       (!d.closeDate || d.closeDate >= "2026-08-01")
     ) {
       const facts = await resolveListing(d.company, d.priceMax);
+      tavilySpent += 1;
       if (facts.price) {
         d.listingPrice = facts.price;
         if (facts.gainPct != null) d.listingGainPct = facts.gainPct;
@@ -239,12 +267,12 @@ export async function GET(req: Request) {
     }
   }
 
-  await beat({ phase: "done", docsParsed, listingsFixed, newsCached, timedOut });
+  await beat({ phase: "done", docsParsed, listingsFixed, newsCached, pressFilled, tavilySpent, timedOut });
 
   // Cache invalidation: without this, ISR pages (home 30min, calendar 30min) keep
   // serving pre-sync HTML after status changes (e.g. upcoming -> live). Any write
   // busts list pages immediately; touched slugs bust their dossiers.
-  const wrote = updated + inserted + forthcomingNew + transitioned + docsParsed + listingsFixed + newsCached;
+  const wrote = updated + inserted + forthcomingNew + transitioned + docsParsed + listingsFixed + newsCached + pressFilled;
   const revalidated: string[] = [];
   if (wrote > 0) {
     const lists = ["/", "/calendar", "/brief", "/performance", "/status"];
@@ -261,5 +289,5 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, timedOut, revalidated: revalidated.length, touched: touched.size });
+  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, pressFilled, tavilySpent, timedOut, revalidated: revalidated.length, touched: touched.size });
 }
