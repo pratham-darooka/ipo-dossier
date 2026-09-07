@@ -51,17 +51,34 @@ async function resolveDocUrl(company) {
 
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 
-async function dive(company, url) {
-  const tmp = path.join(os.tmpdir(), `dossier-${Date.now()}.pdf`);
+async function fetchBuf(url, ms = 45000) {
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 45000);
+    const t = setTimeout(() => ctrl.abort(), ms);
     const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 Chrome/126" }, signal: ctrl.signal });
     clearTimeout(t);
     if (!r.ok) return null;
-    const ct = r.headers.get("content-type") || "";
-    if (!/pdf/i.test(ct) && !/octet-stream/i.test(ct)) return null; // index pages/blogs aren't filings
-    const buf = Buffer.from(await r.arrayBuffer());
+    return { buf: Buffer.from(await r.arrayBuffer()), ct: r.headers.get("content-type") || "", finalUrl: r.url || url };
+  } catch { return null; }
+}
+
+async function dive(company, url) {
+  const tmp = path.join(os.tmpdir(), `dossier-${Date.now()}.pdf`);
+  try {
+    let got = await fetchBuf(url);
+    if (!got) return null;
+    // HTML landing (SEBI filing pages): follow first same-origin PDF link
+    if (!/pdf|octet-stream/i.test(got.ct)) {
+      const html = got.buf.toString("utf8").slice(0, 500000);
+      const hrefs = [...html.matchAll(/href="([^"]+\.pdf[^"]*)"/gi)].map((m) => m[1]);
+      if (!hrefs.length) return null;
+      const abs = hrefs.map((h) => { try { return new URL(h, got.finalUrl).toString(); } catch { return ""; } }).filter(Boolean);
+      const origin = new URL(got.finalUrl).origin;
+      abs.sort((a, b) => (b.startsWith(origin) ? 1 : 0) - (a.startsWith(origin) ? 1 : 0));
+      got = await fetchBuf(abs[0]);
+      if (!got || !/pdf|octet-stream/i.test(got.ct)) return null;
+    }
+    const buf = got.buf;
     if (buf.length > 25 * 1024 * 1024 || buf.length < 1024) return null;
     await fs.promises.writeFile(tmp, buf);
 

@@ -1,11 +1,59 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import * as cheerio from "cheerio";
 import { extractText } from "unpdf";
 import { groqExtractFiling } from "./ai/groq";
 import type { IpoSeed } from "./data";
 
 const MAX_PDF_BYTES = 25 * 1024 * 1024;
+const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126 Safari/537.36";
+
+async function fetchBuf(url: string, ms = 45000): Promise<{ buf: Buffer; ct: string; finalUrl: string } | null> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    const r = await fetch(url, { headers: { "User-Agent": UA }, signal: ctrl.signal });
+    clearTimeout(t);
+    if (!r.ok) return null;
+    return { buf: Buffer.from(await r.arrayBuffer()), ct: r.headers.get("content-type") || "", finalUrl: r.url || url };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * SEBI filing pages and issuer pages are HTML landings, not PDFs. Follow the first
+ * same-origin .pdf link (this is what Pranav/Kanohar-style docUrls point at).
+ */
+async function resolvePdfTarget(docUrl: string): Promise<{ buf: Buffer } | null> {
+  const first = await fetchBuf(docUrl);
+  if (!first) return null;
+  if (/pdf/i.test(first.ct) || /octet-stream/i.test(first.ct)) return { buf: first.buf };
+  // HTML landing: harvest candidate PDFs, same-origin first
+  try {
+    const html = first.buf.toString("utf8").slice(0, 500000);
+    const $ = cheerio.load(html);
+    const origin = new URL(first.finalUrl).origin;
+    const links = $("a[href]")
+      .map((_, a) => {
+        try {
+          return new URL($(a).attr("href") ?? "", first.finalUrl).toString();
+        } catch {
+          return "";
+        }
+      })
+      .get()
+      .filter((u) => /\.pdf(\?|#|$)/i.test(u));
+    if (!links.length) return null;
+    links.sort((a, b) => (b.startsWith(origin) ? 1 : 0) - (a.startsWith(origin) ? 1 : 0));
+    const pdf = await fetchBuf(links[0]);
+    if (!pdf || (!/pdf/i.test(pdf.ct) && !/octet-stream/i.test(pdf.ct))) return null;
+    return { buf: pdf.buf };
+  } catch {
+    return null;
+  }
+}
 
 const BAD_URL = /chittorgarh\.com\/report\/|groww\.in\/blog|moneycontrol\.com\/news|indmoney\.com\/blog/i;
 
@@ -72,17 +120,9 @@ function mergeFin(base: IpoSeed["financials"], add: unknown): IpoSeed["financial
 export async function deepDiveDoc(company: string, docUrl: string): Promise<Partial<IpoSeed> | null> {
   const tmp = path.join(os.tmpdir(), `dossier-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 60000);
-    const r = await fetch(docUrl, {
-      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126 Safari/537.36" },
-      signal: ctrl.signal,
-    });
-    clearTimeout(t);
-    if (!r.ok) return null;
-    const ct = r.headers.get("content-type") || "";
-    if (!/pdf/i.test(ct) && !/octet-stream/i.test(ct)) return null;
-    const buf = Buffer.from(await r.arrayBuffer());
+    const got = await resolvePdfTarget(docUrl);
+    if (!got) return null;
+    const buf = got.buf;
     if (buf.length > MAX_PDF_BYTES || buf.length < 1024) return null;
     await fs.writeFile(tmp, buf);
 

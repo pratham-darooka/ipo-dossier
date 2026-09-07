@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { dbReady, ensureIpoTable, sql } from "@/lib/db";
 import { fetchNseLive, fetchNseUpcoming, normName, nseStatusToOurs, slugify, type NseLive } from "@/lib/nse";
 import { fetchChittorgarhForthcoming } from "@/lib/chittorgarh";
@@ -48,6 +49,7 @@ export async function GET(req: Request) {
 
   let updated = 0;
   let inserted = 0;
+  const touched = new Set<string>(); // slugs whose pages must revalidate after writes
 
   // --- 1. NSE calendar + live demand overlay (cheap, all rows) ---
   for (const u of upcoming) {
@@ -78,7 +80,7 @@ export async function GET(req: Request) {
     if (u.priceMax) base.priceMax = u.priceMax;
     if (u.issueSizeShares && !base.issueSizeCr) base.issueSizeCr = Math.round(((u.issueSizeShares * (u.priceMax ?? 0)) / 1e7) * 10) / 10;
     if (liveHit?.totalX != null) {
-      base.subscription = { ...base.subscription, total: liveHit.totalX };
+      base.subscription = { ...base.subscription, total: Math.round(liveHit.totalX * 100) / 100 };
       if (base.status === "upcoming") base.status = "live";
     }
     base.partial = (base.financials?.length ?? 0) === 0;
@@ -95,6 +97,7 @@ export async function GET(req: Request) {
       inserted++;
       bySlug.set(resolvedSlug, { slug: resolvedSlug, company: base.company, status: base.status, data: base });
     }
+    touched.add(resolvedSlug);
   }
 
   // --- 1a. Forthcoming board (Chittorgarh): names NSE hasn't listed yet -> upcoming partials ---
@@ -118,6 +121,7 @@ export async function GET(req: Request) {
     `;
     bySlug.set(slug, { slug, company: f.company, status: "upcoming", data: base });
     forthcomingNew++;
+    touched.add(slug);
   }
 
   // --- 1b. Stale-close transition: rows NSE no longer lists whose window shut -> listed ---
@@ -137,6 +141,7 @@ export async function GET(req: Request) {
       await q`UPDATE ipo SET status = 'listed', data = ${JSON.stringify(d)}::jsonb, updated_at = NOW() WHERE slug = ${slug}`;
       r.status = "listed";
       transitioned++;
+      touched.add(slug);
     }
   }
 
@@ -230,10 +235,31 @@ export async function GET(req: Request) {
     if (dirty) {
       d.syncedAt = new Date().toISOString();
       await q`UPDATE ipo SET data = ${JSON.stringify(d)}::jsonb, updated_at = NOW() WHERE slug = ${r.slug}`;
+      touched.add(r.slug);
     }
   }
 
   await beat({ phase: "done", docsParsed, listingsFixed, newsCached, timedOut });
 
-  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, timedOut });
+  // Cache invalidation: without this, ISR pages (home 30min, calendar 30min) keep
+  // serving pre-sync HTML after status changes (e.g. upcoming -> live). Any write
+  // busts list pages immediately; touched slugs bust their dossiers.
+  const wrote = updated + inserted + forthcomingNew + transitioned + docsParsed + listingsFixed + newsCached;
+  const revalidated: string[] = [];
+  if (wrote > 0) {
+    const lists = ["/", "/calendar", "/brief", "/performance", "/status"];
+    for (const p of lists) {
+      try {
+        revalidatePath(p);
+        revalidated.push(p);
+      } catch { /* best effort */ }
+    }
+    for (const slug of touched) {
+      try {
+        revalidatePath(`/ipo/${slug}`);
+      } catch { /* best effort */ }
+    }
+  }
+
+  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, timedOut, revalidated: revalidated.length, touched: touched.size });
 }

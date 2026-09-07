@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { dbReady, ensureIpoTable, sql } from "@/lib/db";
 import { refreshGmp } from "@/lib/gmp";
 import type { IpoSeed } from "@/lib/data";
@@ -50,5 +51,19 @@ export async function GET(req: Request) {
     ON CONFLICT (slug) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
   `;
 
-  return NextResponse.json({ ok: true, checked: rows.length, refreshed, stale, at: new Date().toISOString() });
+  // Fresh GMP must reach the homepage/brief immediately, not at the next ISR window.
+  if (refreshed > 0) {
+    for (const p of ["/", "/brief", "/calendar", "/status"]) {
+      try {
+        revalidatePath(p);
+      } catch { /* best effort */ }
+    }
+    for (const r of rows) {
+      try {
+        revalidatePath(`/ipo/${r.slug}`);
+      } catch { /* best effort */ }
+    }
+  }
+
+  return NextResponse.json({ ok: true, checked: rows.length, refreshed, stale, revalidated: refreshed > 0, at: new Date().toISOString() });
 }
