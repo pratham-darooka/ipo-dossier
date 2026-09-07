@@ -164,9 +164,13 @@ export function DemandSlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: numbe
       `Anchor list drops a day before — quality names = confidence.`,
       `First GMP quote lands ~2 days pre-open. Direction, not gospel.`,
     ];
+    const openLabel = openDay
+      ? `Bidding opens ${openDay.slice(8)} ${["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(openDay.slice(5, 7))]}`
+      : "Bidding opens soon";
+    const openShort = openDay ? `${openDay.slice(8)} ${["", "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"][Number(openDay.slice(5, 7))].toUpperCase()}` : "SOON";
     return (
-      <Frame foot={`SLIDE ${n}/${of} · OPENS ${openDay || "SOON"}`}>
-        <div style={{ fontSize: 64, fontWeight: 900 }}>Bidding opens {openDay ? openDay.slice(8) + " " + ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(openDay.slice(5, 7))] : "soon"}</div>
+      <Frame foot={`SLIDE ${n}/${of} · OPENS ${openShort}`}>
+        <div style={{ fontSize: 64, fontWeight: 900 }}>{openLabel}</div>
         <div style={{ fontSize: 32, color: "#8A94A6", marginTop: 8 }}>No tape yet. Here is exactly what to watch:</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 22, marginTop: 30 }}>
           {watch.map((w, i) => (
