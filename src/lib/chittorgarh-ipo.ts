@@ -22,7 +22,9 @@ const num = (s: string): number => {
   return m ? Number(m[0]) : 0;
 };
 
-function cell($: cheerio.CheerioAPI, tr: cheerio.Element): string[] {
+type $Fn = ReturnType<typeof cheerio.load>;
+
+function cell($: $Fn, tr: cheerio.Element): string[] {
   return $(tr).find("th,td").map((_, c) => $(c).text().replace(/\s+/g, " ").trim()).get();
 }
 
@@ -123,7 +125,7 @@ export async function parseChittorgarhIpo(url: string): Promise<ChitPatch | null
           cfoCr: 0,
         };
       })
-      .filter((x): x is NonNullable<typeof x> => Boolean(x) && x.revenueCr > 0);
+      .filter((x): x is { fy: string; revenueCr: number; patCr: number; roe: number; roce: number; de: number; cfoCr: number } => Boolean(x) && (x?.revenueCr ?? 0) > 0);
     if (fins.length >= 2) {
       patch.financials = fins.slice(-3);
       (patch as Record<string, unknown>).finSource = "rhp";
