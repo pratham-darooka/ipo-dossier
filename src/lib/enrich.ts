@@ -18,6 +18,7 @@ type PressJson = {
   promoterPre?: number;
   promoterPost?: number;
   freshIssuePct?: number;
+  anchorCr?: number;
   registrar?: string;
   leadManagers?: string[];
   about?: string;
@@ -28,13 +29,12 @@ type PressJson = {
   nii?: number;
   retail?: number;
 };
-
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
 const str = (v: unknown, n = 0): string => (typeof v === "string" && v.trim().length > 5 ? v.trim().slice(0, n || v.trim().length) : "");
 
-async function pressSearch(company: string): Promise<{ text: string; urls: string[] }> {
+async function pressSearch(company: string): Promise<{ text: string; hits: { title: string; url: string }[] }> {
   const key = process.env.TAVILY_API_KEY;
-  if (!key) return { text: "", urls: [] };
+  if (!key) return { text: "", hits: [] };
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 25000);
@@ -51,16 +51,19 @@ async function pressSearch(company: string): Promise<{ text: string; urls: strin
       signal: ctrl.signal,
     });
     clearTimeout(t);
-    if (!r.ok) return { text: "", urls: [] };
+    if (!r.ok) return { text: "", hits: [] };
     const j = (await r.json()) as { results?: { title?: string; url?: string; content?: string }[]; answer?: string };
     const parts: string[] = [];
     if (j.answer) parts.push(`SUMMARY: ${j.answer}`);
     for (const h of j.results ?? []) {
       parts.push(`--- ${h.title ?? ""} (${h.url ?? ""})\n${(h.content ?? "").slice(0, 1500)}`);
     }
-    return { text: parts.join("\n").slice(0, 12000), urls: (j.results ?? []).map((h) => h.url ?? "").filter(Boolean) };
+    return {
+      text: parts.join("\n").slice(0, 12000),
+      hits: (j.results ?? []).map((h) => ({ title: (h.title ?? "").slice(0, 140), url: h.url ?? "" })).filter((h) => h.url && !/chitorgarh\.com\/report\//i.test(h.url)),
+    };
   } catch {
-    return { text: "", urls: [] };
+    return { text: "", hits: [] };
   }
 }
 
@@ -96,7 +99,7 @@ export async function pressEnrich(d: IpoSeed): Promise<{ patch: Partial<IpoSeed>
     (d.subscription.total === 0 && d.status !== "upcoming");
   if (!needs) return { patch: {}, searches: 0 };
 
-  const { text } = await pressSearch(d.company);
+  const { text, hits } = await pressSearch(d.company);
   if (text.trim().length < 500) return { patch: {}, searches: 1 };
 
   const ex = (await groqExtractFiling(
@@ -143,6 +146,13 @@ export async function pressEnrich(d: IpoSeed): Promise<{ patch: Partial<IpoSeed>
   if (typeof ex.promoterPre === "number" && !d.promoterPre) patch.promoterPre = ex.promoterPre;
   if (typeof ex.promoterPost === "number" && !d.promoterPost) patch.promoterPost = ex.promoterPost;
   if (typeof ex.freshIssuePct === "number" && !d.freshIssuePct) patch.freshIssuePct = ex.freshIssuePct;
+  if (!(d.news?.length) && hits.length) {
+    patch.news = hits.slice(0, 5).map((h) => ({ title: h.title || h.url, url: h.url }));
+  }
+  if (typeof ex.anchorCr === "number" && !d.anchorPct && d.issueSizeCr) {
+    const pct = Math.round(((ex.anchorCr as number) / d.issueSizeCr) * 1000) / 10;
+    if (pct > 0 && pct <= 60) patch.anchorPct = pct;
+  }
   return { patch, searches: 1 };
 }
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, Building2, Users, AlertTriangle, FileText, ExternalLink, Satellite } from "lucide-react";
+import { ArrowLeft, CalendarDays, Building2, Users, AlertTriangle, FileText, ExternalLink, Satellite, Scale, ShieldAlert, Newspaper } from "lucide-react";
 import { IPOS, minInvestment, expectedListing, type IpoSeed } from "@/lib/data";
 import { findIpo, getAllIpos } from "@/lib/ipos";
 import { scoreListing, scoreLongTerm, verdict } from "@/lib/scoring";
@@ -207,6 +207,74 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
         <section className="mt-6 rounded-[2rem] border border-dashed border-white/20 p-6 md:p-8 text-center">
           <div className="font-display text-2xl font-black">📑 Dossier building…</div>
           <p className="mt-2 text-sm opacity-60 max-w-xl mx-auto">NSE calendar data is live above. Restated financials, peers and DRHP forensics auto-attach once the offer document is parsed — usually within a day of the RHP.</p>
+        </section>
+      )}
+
+      {/* DEEP DIVE — valuation, risks, news tape */}
+      <section className="mt-6 grid gap-6 lg:grid-cols-5">
+        <Reveal className="lg:col-span-3 rounded-[2rem] border border-white/10 p-6 md:p-8">
+          <h3 className="font-display text-2xl font-black flex items-center gap-2"><Scale className="size-5" /> Valuation vs listed peers</h3>
+          {ipo.peers.length ? (
+            <>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full font-mono2 text-sm min-w-[420px]">
+                  <thead><tr className="opacity-50 text-xs">{["COMPANY", "P/E", "P/B", "ROE"].map((h) => <th key={h} className="text-left py-2 pr-4">{h}</th>)}</tr></thead>
+                  <tbody>
+                    <tr className="border-t border-[#D4FF4F]/30 bg-[#D4FF4F]/5">
+                      <td className="py-3 pr-4 font-bold">{ipo.company} (IPO)</td>
+                      <td className="pr-4 tnum">—</td>
+                      <td className="pr-4 tnum">—</td>
+                      <td className="pr-4 tnum">{last && last.revenueCr ? `${((last.patCr / last.revenueCr) * 100).toFixed(1)}% margin` : "—"}</td>
+                    </tr>
+                    {ipo.peers.map((p) => (
+                      <tr key={p.name} className="border-t border-white/10">
+                        <td className="py-3 pr-4">{p.name}</td>
+                        <td className="pr-4 tnum">{p.pe || "—"}</td>
+                        <td className="pr-4 tnum">{p.pb || "—"}</td>
+                        <td className="pr-4 tnum">{p.roe ? `${p.roe}%` : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 text-sm opacity-60">
+                Read it as: peers show what the market already pays for this business model.
+                {ipo.priceMax > 0 && last && last.patCr > 0 ? " Full P/E math lands with the RHP parse (needs outstanding share count)." : " IPO multiples land with the RHP parse."}
+              </p>
+            </>
+          ) : (
+            <p className="mt-3 text-sm opacity-60">Peer set is being compiled from analyst coverage — typically lands a day after the price band. Check back or tap Re-run AI above.</p>
+          )}
+        </Reveal>
+
+        <Reveal delay={0.08} className="lg:col-span-2 rounded-[2rem] border border-[#FF5C5C]/25 p-6 md:p-8">
+          <h3 className="font-display text-2xl font-black flex items-center gap-2"><ShieldAlert className="size-5" /> Risk dossier</h3>
+          {ipo.risks.length ? (
+            <ol className="mt-4 space-y-3 text-sm">
+              {ipo.risks.map((r, i) => (
+                <li key={i} className="flex gap-3">
+                  <span className="font-mono2 font-black text-[#FF5C5C]">0{i + 1}</span>
+                  <span className="opacity-80">{r}</span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="mt-3 text-sm opacity-60">Risk factors extract from the offer document next — check back before close.</p>
+          )}
+        </Reveal>
+      </section>
+
+      {ipo.news && ipo.news.length > 0 && (
+        <section className="mt-6 rounded-[2rem] border border-white/10 p-6 md:p-8">
+          <h3 className="font-display text-2xl font-black flex items-center gap-2"><Newspaper className="size-5" /> Street tape</h3>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {ipo.news.slice(0, 6).map((n) => (
+              <a key={n.url} href={n.url} target="_blank" rel="noreferrer" className="rounded-2xl bg-black/5 dark:bg-white/5 p-4 hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                <div className="text-sm font-bold leading-snug">{n.title}</div>
+                <div className="mt-1 font-mono2 text-[11px] opacity-50">{n.publishedDate ? new Date(n.publishedDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "recent"} · {(n.url || "").replace(/^https?:\/\/(www\.)?/, "").split("/")[0] || "source"} ↗</div>
+              </a>
+            ))}
+          </div>
         </section>
       )}
 

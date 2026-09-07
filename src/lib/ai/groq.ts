@@ -84,7 +84,7 @@ export async function groqSummarize(prompt: string, context: string): Promise<st
 /** Deep-dive a long filing excerpt into structured JSON (drives dossier enrichment). */
 export async function groqExtractFiling(excerpt: string): Promise<Record<string, unknown> | null> {
   const text = await chat({
-    system: `You extract structured facts from Indian IPO offer documents. Return STRICT JSON only: {"financials":[{"fy":"FY24","revenueCr":n,"patCr":n,"roe":n,"roce":n,"de":n,"cfoCr":n}],"peers":[{"name":s,"pe":n,"pb":n,"roe":n}],"risks":[s],"objectsOfIssue":[s],"promoterPre":n,"promoterPost":n,"freshIssuePct":n,"registrar":s,"leadManagers":[s],"about":s}. Use null for anything not found. Numbers only, no commas, no currency symbols.`,
+    system: `You extract structured facts from Indian IPO offer documents. Return STRICT JSON only: {"financials":[{"fy":"FY24","revenueCr":n,"patCr":n,"roe":n,"roce":n,"de":n,"cfoCr":n}],"peers":[{"name":s,"pe":n,"pb":n,"roe":n}],"risks":[s],"objectsOfIssue":[s],"promoterPre":n,"promoterPost":n,"freshIssuePct":n,"anchorCr":n,"registrar":s,"leadManagers":[s],"about":s}. Use null for anything not found. Numbers only, no commas, no currency symbols. anchorCr = anchor book size in Rs crore.`,
     user: `Extract from this offer-document text:\n${excerpt.slice(0, 14000)}`,
     maxTokens: 2000,
     json: true,
