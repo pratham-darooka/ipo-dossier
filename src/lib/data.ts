@@ -19,6 +19,12 @@ export type IpoSeed = {
   // Past-IPO facts (listing day truth).
   listingPrice?: number; listingGainPct?: number;
   listingDay?: { open: number; high: number; low: number; close: number };
+  // Provenance: filing-grade vs press-reported figures.
+  finSource?: "rhp" | "press";
+  // Cached Groq verdict duo (served instantly, refreshed on data change / 24h).
+  aiVerdict?: { listing: { score: number; verdict: string; reasons: string[]; action: string }; longterm: { score: number; verdict: string; reasons: string[]; action: string }; oneLiner: string; redFlags: string[] };
+  aiVerdictAt?: string;
+  aiVerdictKey?: string;
   // Web intel (Tavily, cached — never fetched per page-view).
   news?: { title: string; url: string; publishedDate?: string }[];
 };

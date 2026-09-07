@@ -177,6 +177,9 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
       {hasFin ? (
         <section className="mt-6 rounded-[2rem] border border-white/10 p-6 md:p-8 overflow-x-auto">
           <h3 className="font-display text-2xl font-black">Deep financials — does profit become cash?</h3>
+          {ipo.finSource === "press" && (
+            <p className="mt-1 font-mono2 text-[11px] opacity-50">FIGURES VIA PRESS REPORTS — RESTATED FILING PENDING · ROE/DE LAND WITH THE RHP PARSE</p>
+          )}
           <table className="mt-4 w-full font-mono2 text-sm min-w-[640px]">
             <thead><tr className="opacity-50 text-xs">{["FY", "REVENUE", "PAT", "MARGIN", "ROE", "ROCE", "D/E", "CFO"].map((h) => <th key={h} className="text-left py-2 pr-4">{h}</th>)}</tr></thead>
             <tbody>
@@ -186,9 +189,9 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
                   <td className="pr-4 tnum">₹{row.revenueCr} Cr</td>
                   <td className="pr-4 tnum">₹{row.patCr} Cr</td>
                   <td className="pr-4 tnum">{((row.patCr / row.revenueCr) * 100).toFixed(1)}%</td>
-                  <td className="pr-4 tnum">{row.roe}%</td>
-                  <td className="pr-4 tnum">{row.roce}%</td>
-                  <td className="pr-4 tnum">{row.de}x</td>
+                  <td className="pr-4 tnum">{row.roe ? `${row.roe}%` : "—"}</td>
+                  <td className="pr-4 tnum">{row.roce ? `${row.roce}%` : "—"}</td>
+                  <td className="pr-4 tnum">{row.de ? `${row.de}x` : "—"}</td>
                   <td className={`pr-4 tnum font-bold ${row.cfoCr < 0 ? "text-[#FF5C5C]" : "text-[#9db82a] dark:text-[#D4FF4F]"}`}>₹{row.cfoCr} Cr</td>
                 </tr>
               ))}

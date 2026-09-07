@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScoreDial } from "./score-dial";
 import { BrainCircuit, Loader2, Sparkles } from "lucide-react";
 
@@ -14,27 +14,40 @@ type Duo = {
 export function VerdictDuo({ slug, fallback }: { slug: string; fallback: Duo }) {
   const [data, setData] = useState<Duo>(fallback);
   const [ai, setAi] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [cached, setCached] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const asked = useRef(false);
 
-  async function askGroq() {
-    setLoading(true);
+  async function askGroq(refresh = false) {
+    if (!refresh) setLoading(true);
     try {
       const r = await fetch("/api/ai/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug }),
+        body: JSON.stringify({ slug, refresh }),
       });
       const j = await r.json();
       if (j?.ok && j?.verdict) {
         setData(j.verdict);
-        setAi(true);
+        setAi(Boolean(j.ai));
+        setCached(Boolean(j.cached));
       }
     } finally {
       setLoading(false);
     }
   }
 
-  // Manual trigger only — deterministic scores render instantly, Groq runs on demand to save calls.
+  // Auto-load once per mount. First view generates + caches in Neon (~3s);
+  // every later view serves the cache instantly until inputs move or 24h pass.
+  // setState only fires inside the async continuation (never sync in effect body).
+  useEffect(() => {
+    if (asked.current) return;
+    asked.current = true;
+    void (async () => {
+      await askGroq(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slug]);
 
   const pill = (v: string) =>
     v === "APPLY" ? "bg-[#D4FF4F] text-black" : v === "AVOID" ? "bg-[#FF5C5C] text-black" : "bg-[#E8C15A] text-black";
@@ -43,8 +56,8 @@ export function VerdictDuo({ slug, fallback }: { slug: string; fallback: Duo }) 
     <div>
       <div className="flex items-center gap-2 font-mono2 text-[11px] tracking-[0.2em] opacity-60">
         <BrainCircuit className="size-4" />
-        {ai ? "GROQ AI · GROUNDED ON FILING" : loading ? "ASKING GROQ…" : "DETERMINISTIC SCORE · TAP RE-RUN FOR AI NARRATIVE"}
-        <button onClick={askGroq} className="ml-auto inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 hover:bg-white/5">
+        {ai ? (cached ? "GROQ AI · CACHED TAKE" : "GROQ AI · FRESH TAKE") : loading ? "READING THE FILING…" : "DETERMINISTIC SCORE"}
+        <button onClick={() => askGroq(true)} className="ml-auto inline-flex items-center gap-1 rounded-full border border-white/15 px-3 py-1 hover:bg-white/5">
           {loading ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />} Re-run AI
         </button>
       </div>
