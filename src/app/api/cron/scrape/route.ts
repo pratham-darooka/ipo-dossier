@@ -6,6 +6,7 @@ import { fetchChittorgarhForthcoming } from "@/lib/chittorgarh";
 import { nseToPartial } from "@/lib/ipos";
 import { deepDiveDoc, resolveDocUrl } from "@/lib/docs";
 import { pressEnrich } from "@/lib/enrich";
+import { chittorgarhLinks, parseChittorgarhIpo } from "@/lib/chittorgarh-ipo";
 import { resolveListing } from "@/lib/listings";
 import { ipoIntel } from "@/lib/tavily";
 import { IPOS, type IpoSeed } from "@/lib/data";
@@ -175,10 +176,14 @@ export async function GET(req: Request) {
   let listingsFixed = 0;
   let newsCached = 0;
   let pressFilled = 0;
+  let chitFilled = 0;
+  let chitDone = 0;
   let tavilySpent = 0;
+  const chitLinkMap = await chittorgarhLinks().catch(() => new Map<string, string>());
   const DOC_BUDGET = 1; // one deep-dive per run: RHP downloads alone can eat 30s+
   const LISTING_BUDGET = 5;
   const PRESS_BUDGET = 12; // ~12 Tavily searches/run; steady-state spends ~0 (complete rows skip free)
+  const CHIT_BUDGET = 4; // free Chittorgarh page parses/run (no rate limits, just time)
   const DEADLINE = Date.now() + 40000; // leave headroom inside the 60s function limit
   let timedOut = false;
 
@@ -200,6 +205,42 @@ export async function GET(req: Request) {
         d.partial = (d.financials?.length ?? 0) === 0;
         pressFilled++;
         dirty = true;
+      }
+    }
+
+    // Free structural fill: Chittorgarh per-IPO pages (band, lot, listing date,
+    // fresh/OFS, 3-yr financials) — no Tavily/Groq cost. Runs before paid steps.
+    if (chitDone < CHIT_BUDGET && (!d.priceMax || !d.lotSize || !d.listingDate || (d.financials?.length ?? 0) < 3)) {
+      const url = chitLinkMap.get(normName(d.company));
+      if (url) {
+        const cp = await parseChittorgarhIpo(url);
+        if (cp) {
+          let hit = false;
+          if (!d.priceMax && (cp as Record<string, unknown>).priceMax) {
+            d.priceMin = (cp as Record<string, unknown>).priceMin as number;
+            d.priceMax = (cp as Record<string, unknown>).priceMax as number;
+            hit = true;
+          }
+          if (!d.lotSize && (cp as Record<string, unknown>).lotSize) { d.lotSize = (cp as Record<string, unknown>).lotSize as number; hit = true; }
+          if (!d.listingDate && cp.listingDateFound) { d.listingDate = cp.listingDateFound; hit = true; }
+          if (!d.freshIssuePct && (cp as Record<string, unknown>).freshIssuePct) { d.freshIssuePct = (cp as Record<string, unknown>).freshIssuePct as number; hit = true; }
+          if ((d.financials?.length ?? 0) < 3 && cp.financials?.length) {
+            const byFy = new Map(d.financials.map((x) => [x.fy, x]));
+            for (const fr of cp.financials) {
+              const prev = byFy.get(fr.fy);
+              byFy.set(fr.fy, { revenueCr: fr.revenueCr || prev?.revenueCr || 0, patCr: fr.patCr || prev?.patCr || 0, roe: prev?.roe || 0, roce: prev?.roce || 0, de: prev?.de || 0, cfoCr: prev?.cfoCr || 0, fy: fr.fy });
+            }
+            d.financials = [...byFy.values()].slice(-3);
+            d.finSource = "rhp";
+            hit = true;
+          }
+          if (hit) {
+            d.partial = (d.financials?.length ?? 0) === 0;
+            chitFilled++;
+            dirty = true;
+          }
+        }
+        chitDone++;
       }
     }
 
@@ -267,12 +308,12 @@ export async function GET(req: Request) {
     }
   }
 
-  await beat({ phase: "done", docsParsed, listingsFixed, newsCached, pressFilled, tavilySpent, timedOut });
+  await beat({ phase: "done", docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, tavilySpent, timedOut });
 
   // Cache invalidation: without this, ISR pages (home 30min, calendar 30min) keep
   // serving pre-sync HTML after status changes (e.g. upcoming -> live). Any write
   // busts list pages immediately; touched slugs bust their dossiers.
-  const wrote = updated + inserted + forthcomingNew + transitioned + docsParsed + listingsFixed + newsCached + pressFilled;
+  const wrote = updated + inserted + forthcomingNew + transitioned + docsParsed + listingsFixed + newsCached + pressFilled + chitFilled;
   const revalidated: string[] = [];
   if (wrote > 0) {
     const lists = ["/", "/calendar", "/brief", "/performance", "/status"];
@@ -289,5 +330,5 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, pressFilled, tavilySpent, timedOut, revalidated: revalidated.length, touched: touched.size });
+  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, tavilySpent, timedOut, revalidated: revalidated.length, touched: touched.size });
 }
