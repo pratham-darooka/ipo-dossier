@@ -8,6 +8,7 @@ import { scoreListing, scoreLongTerm, verdict } from "@/lib/scoring";
 import { ipoFaqs, ipoJsonLd, SITE_URL } from "@/lib/seo";
 import { JsonLd } from "@/components/json-ld";
 import { VerdictDuo } from "@/components/verdict-duo";
+import { ShareRow } from "@/components/share-row";
 import { Reveal } from "@/components/reveal";
 import { fmtDate } from "@/lib/utils";
 
@@ -128,6 +129,12 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
       {/* VERDICT DUO */}
       <section className="mt-8 rounded-[2rem] border border-white/10 p-6 md:p-10">
         <VerdictDuo slug={ipo.slug} fallback={fallback} />
+        <div className="mt-6 border-t border-white/10 pt-5">
+          <ShareRow
+            title={`${ipo.company} IPO — our take`}
+            text={`Listing ${l.score.toFixed(1)}/10 (${verdict(l.score)}) · Long-term ${lt.score.toFixed(1)}/10 (${hasFullFin ? verdict(lt.score) : "NEUTRAL"})${ipo.subscription.total > 0 ? ` · ${ipo.subscription.total}x subscribed` : ""}${ipo.gmp.pct > 0 ? ` · GMP +${ipo.gmp.pct}%` : ""}. Full dossier:`}
+          />
+        </div>
       </section>
 
       {/* DEMAND */}

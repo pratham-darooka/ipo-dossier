@@ -6,7 +6,9 @@ import { fetchChittorgarhForthcoming } from "@/lib/chittorgarh";
 import { nseToPartial } from "@/lib/ipos";
 import { deepDiveDoc, resolveDocUrl } from "@/lib/docs";
 import { pressEnrich } from "@/lib/enrich";
+import { indexNowPing } from "@/lib/indexnow";
 import { chittorgarhLinks, parseChittorgarhIpo } from "@/lib/chittorgarh-ipo";
+import { briefText, postTelegram } from "@/lib/social/telegram";
 import { resolveListing } from "@/lib/listings";
 import { ipoIntel } from "@/lib/tavily";
 import { IPOS, type IpoSeed } from "@/lib/data";
@@ -330,5 +332,26 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, tavilySpent, timedOut, revalidated: revalidated.length, touched: touched.size });
+  // Free distribution: Telegram morning brief — only on the scheduled run
+  // (vercel.json appends &brief=1). Manual triggers never spam the channel.
+  let telegram: string = "skipped";
+  if (sp.get("brief") === "1") {
+    try {
+      const ist = new Date(Date.now() + 5.5 * 3600000).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+      const text = briefText(all.map((r) => r.data as IpoSeed), ist);
+      const sent = await postTelegram(text);
+      telegram = sent.ok ? "sent" : `skip:${sent.error}`;
+    } catch {
+      telegram = "error";
+    }
+  }
+
+  // Free SEO: ping IndexNow with changed URLs (best-effort, non-blocking).
+  let indexed = 0;
+  if (wrote > 0) {
+    const paths = ["/", "/calendar", "/brief", ...[...touched].map((s) => `/ipo/${s}`)];
+    indexed = await indexNowPing(paths).catch(() => 0);
+  }
+
+  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, tavilySpent, timedOut, revalidated: revalidated.length, touched: touched.size, indexed, telegram });
 }

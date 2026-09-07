@@ -120,30 +120,85 @@ const vColor = (v: string) => (v === "APPLY" ? "#D4FF4F" : v === "AVOID" ? "#FF5
 /** Slide 1: cover */
 export function CoverSlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: number }) {
   const { l, lt, vl, vlt } = ipoScores(ipo);
+  const hasSignal = ipo.subscription.total > 0 || ipo.gmp.pct > 0 || ipo.status === "listed";
+  const openDay = ipo.openDate ? ipo.openDate.slice(8, 10) + " " + ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(ipo.openDate.slice(5, 7))] : "";
   return (
     <Frame foot={`SLIDE ${n}/${of} · MAINBOARD · NSE BSE`}>
       <div style={{ fontSize: 30, color: "#8A94A6", letterSpacing: 3 }}>{`${ipo.sector.toUpperCase()} · ${ipo.status.toUpperCase()}`}</div>
       <div style={{ fontSize: 92, fontWeight: 900, lineHeight: 1.02, marginTop: 18 }}>{ipo.company}</div>
       <div style={{ fontSize: 40, marginTop: 22, color: "#E8E8E8", display: "flex", flexWrap: "wrap" }}>
-        {ipo.priceMax > 0 ? <span>₹{ipo.priceMin}–₹{ipo.priceMax}  ·  Lot {ipo.lotSize || "—"}</span> : <span>Price band awaited</span>}
+        {ipo.priceMax > 0 ? <span>{`₹${ipo.priceMin}–₹${ipo.priceMax}  ·  Lot ${ipo.lotSize || "—"}`}</span> : <span>Price band awaited</span>}
       </div>
-      <div style={{ display: "flex", gap: 20, marginTop: 44 }}>
-        <Pill bg="#FFFFFF" fg="#080A0F">
-          LIST {l.score.toFixed(1)} · {vl}
-        </Pill>
-        <Pill bg="transparent" fg={vColor(vlt)}>
-          LONG {lt.score.toFixed(1)} · {vlt}
-        </Pill>
-      </div>
+      {hasSignal ? (
+        <div style={{ display: "flex", gap: 20, marginTop: 44 }}>
+          <Pill bg="#FFFFFF" fg="#080A0F">
+            {`LIST ${l.score.toFixed(1)} · ${vl}`}
+          </Pill>
+          <Pill bg="transparent" fg={vColor(vlt)}>
+            {`LONG ${lt.score.toFixed(1)} · ${vlt}`}
+          </Pill>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 20, marginTop: 44 }}>
+          <Pill bg="#D4FF4F" fg="#080A0F">
+            {`OPENS ${openDay || "SOON"}`}
+          </Pill>
+          <Pill bg="transparent" fg="#E8C15A">
+            TAPE GOES LIVE DAY 1
+          </Pill>
+        </div>
+      )}
       <div style={{ fontSize: 34, marginTop: 44, color: "#D4FF4F", fontWeight: 700 }}>Apply or avoid? Swipe →</div>
     </Frame>
   );
 }
 
-/** Slide 2: demand tape */
+/** Slide 2: demand tape — or, pre-open, what to watch */
 export function DemandSlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: number }) {
   const s = ipo.subscription;
   const max = Math.max(s.qib, s.nii, s.retail, 1);
+  const openDay = ipo.openDate ? ipo.openDate.slice(0, 10) : "";
+  if (s.total <= 0 && ipo.status !== "listed") {
+    const watch = [
+      `Day-1 QIB above 5x? Institutions move first, crowd follows.`,
+      `Anchor list drops a day before — quality names = confidence.`,
+      `First GMP quote lands ~2 days pre-open. Direction, not gospel.`,
+    ];
+    return (
+      <Frame foot={`SLIDE ${n}/${of} · OPENS ${openDay || "SOON"}`}>
+        <div style={{ fontSize: 64, fontWeight: 900 }}>Bidding opens {openDay ? openDay.slice(8) + " " + ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][Number(openDay.slice(5, 7))] : "soon"}</div>
+        <div style={{ fontSize: 32, color: "#8A94A6", marginTop: 8 }}>No tape yet. Here is exactly what to watch:</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 22, marginTop: 30 }}>
+          {watch.map((w, i) => (
+            <div key={w} style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 60,
+                  height: 60,
+                  borderRadius: 30,
+                  background: "rgba(212,255,79,0.15)",
+                  color: "#D4FF4F",
+                  fontSize: 30,
+                  fontWeight: 900,
+                }}
+              >
+                {String(i + 1)}
+              </div>
+              <div style={{ fontSize: 34, lineHeight: 1.3 }}>{w}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 20, marginTop: 36, fontSize: 36 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.08)", borderRadius: 20, padding: "20px 30px" }}>
+            <span>Band</span><b>{ipo.priceMax > 0 ? `₹${ipo.priceMin}–₹${ipo.priceMax}` : "awaited"}</b>
+          </div>
+        </div>
+      </Frame>
+    );
+  }
   return (
     <Frame foot={`SLIDE ${n}/${of} · LIVE NSE DEMAND`}>
       <div style={{ fontSize: 64, fontWeight: 900 }}>{`Who's actually bidding?`}</div>
@@ -205,7 +260,32 @@ export function MoneySlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: number
 /** Slide 4: verdict duo */
 export function VerdictSlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: number }) {
   const { l, lt, vl, vlt } = ipoScores(ipo);
-  const top = (arr: string[]) => (arr.length ? arr.slice(0, 2) : ["Watching Day-1 tape"]);
+  // Fallbacks derive from real dossier facts — never generic filler.
+  const factReasons = (side: "list" | "long"): string[] => {
+    const out: string[] = [];
+    if (side === "list") {
+      if (ipo.subscription.total > 0) out.push(`Demand ${ipo.subscription.total}x${ipo.subscription.qib > 0 ? `, QIB ${ipo.subscription.qib}x` : ""}`);
+      else if (ipo.openDate) out.push(`Opens ${ipo.openDate.slice(0, 10)} — tape starts Day 1`);
+      if (ipo.gmp.pct > 0) out.push(`GMP +${ipo.gmp.pct}% (sentiment, not promise)`);
+      else if (ipo.subscription.total <= 0) out.push(`No GMP quote yet — first print ~T-2`);
+      if (ipo.anchorPct > 0) out.push(`Anchors took ${ipo.anchorPct}% pre-open`);
+    } else {
+      const f = ipo.financials;
+      const last = f[f.length - 1];
+      if (last?.revenueCr) {
+        const m = Math.round((last.patCr / last.revenueCr) * 100);
+        out.push(`${last.fy} revenue ₹${last.revenueCr} Cr · ${m}% margin`);
+      }
+      if (ipo.freshIssuePct > 0) out.push(`${ipo.freshIssuePct}% fresh capital ${ipo.freshIssuePct > 50 ? "funds growth" : "— mostly exit"}`);
+      if (ipo.risks[0]) out.push(`Watch: ${ipo.risks[0].slice(0, 80)}`);
+      if (ipo.about) out.push(ipo.about.slice(0, 90));
+    }
+    return out.slice(0, 2);
+  };
+  const top = (arr: string[], side: "list" | "long") => {
+    const real = arr.filter((r) => r && !/tape|await|watch day/i.test(r)).slice(0, 2);
+    return real.length ? real : factReasons(side);
+  };
   return (
     <Frame foot={`SLIDE ${n}/${of} · TWO VERDICTS, NO TIPS`}>
       <div style={{ fontSize: 64, fontWeight: 900 }}>Our take</div>
@@ -215,7 +295,7 @@ export function VerdictSlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: numb
           <div style={{ display: "flex", alignItems: "baseline", gap: 12, fontSize: 54, fontWeight: 900, marginTop: 6 }}>
             <span>{vl}</span><span style={{ fontSize: 32 }}>{l.score.toFixed(1)}/10</span>
           </div>
-          {top(l.reasons).map((r) => (
+          {top(l.reasons, "list").map((r) => (
             <div key={r} style={{ fontSize: 27, marginTop: 10, color: "#E8E8E8" }}>
               {`> ${r.slice(0, 90)}`}
             </div>
@@ -226,7 +306,7 @@ export function VerdictSlide({ ipo, n, of }: { ipo: IpoSeed; n: number; of: numb
           <div style={{ display: "flex", alignItems: "baseline", gap: 12, fontSize: 54, fontWeight: 900, marginTop: 6 }}>
             <span>{vlt}</span><span style={{ fontSize: 32 }}>{lt.score.toFixed(1)}/10</span>
           </div>
-          {top(lt.reasons).map((r) => (
+          {top(lt.reasons, "long").map((r) => (
             <div key={r} style={{ fontSize: 27, marginTop: 10, color: "#E8E8E8" }}>
               {`> ${r.slice(0, 90)}`}
             </div>
