@@ -7,6 +7,7 @@ import { nseToPartial } from "@/lib/ipos";
 import { deepDiveDoc, resolveDocUrl } from "@/lib/docs";
 import { pressEnrich } from "@/lib/enrich";
 import { indexNowPing } from "@/lib/indexnow";
+import { guardSubscription, guardListingPrice, guardBand, guardStatus, tokenOverlap, type Anomaly } from "@/lib/guards";
 import { chittorgarhLinks, parseChittorgarhIpo } from "@/lib/chittorgarh-ipo";
 import { briefText, postTelegram } from "@/lib/social/telegram";
 import { resolveListing } from "@/lib/listings";
@@ -54,6 +55,10 @@ export async function GET(req: Request) {
   let updated = 0;
   let inserted = 0;
   const touched = new Set<string>(); // slugs whose pages must revalidate after writes
+  const anomalies: Anomaly[] = [];
+  const note = (a: Omit<Anomaly, "at">) => {
+    if (anomalies.length < 20) anomalies.push({ ...a, at: new Date().toISOString() });
+  };
 
   // --- 1. NSE calendar + live demand overlay (cheap, all rows) ---
   for (const u of upcoming) {
@@ -77,15 +82,30 @@ export async function GET(req: Request) {
 
     base.company = prev ? ((prev.data as IpoSeed).company || u.company) : (base.company || u.company);
     base.symbol = u.symbol;
-    base.status = status === "listed" && base.status === "live" ? "live" : status;
+    // Status never regresses (a stale feed must not drag live -> upcoming)
+    const st = guardStatus(base.status, status);
+    if (!st.ok) note({ kind: "status-regression-blocked", slug: resolvedSlug, detail: st.reason ?? "" });
+    else base.status = status === "listed" && base.status === "live" ? "live" : status;
     if (u.openDate) base.openDate = u.openDate;
     if (u.closeDate) base.closeDate = u.closeDate;
-    if (u.priceMin) base.priceMin = u.priceMin;
-    if (u.priceMax) base.priceMax = u.priceMax;
+    // Band jumps >15% are flagged, not written (splits/revisions need eyes)
+    if (u.priceMin && u.priceMax) {
+      const bg = guardBand(base.priceMax, u.priceMax);
+      if (!bg.ok) note({ kind: "band-jump-flagged", slug: resolvedSlug, detail: bg.reason ?? "" });
+      else {
+        base.priceMin = u.priceMin;
+        base.priceMax = u.priceMax;
+      }
+    }
     if (u.issueSizeShares && !base.issueSizeCr) base.issueSizeCr = Math.round(((u.issueSizeShares * (u.priceMax ?? 0)) / 1e7) * 10) / 10;
     if (liveHit?.totalX != null) {
-      base.subscription = { ...base.subscription, total: Math.round(liveHit.totalX * 100) / 100 };
-      if (base.status === "upcoming") base.status = "live";
+      // Bidding is cumulative: a lower total later is always stale data
+      const g = guardSubscription(base.subscription, liveHit.totalX);
+      if (g.anomaly) note({ ...g.anomaly, slug: resolvedSlug });
+      if (g.changed) {
+        base.subscription = g.sub;
+        if (base.status === "upcoming") base.status = "live";
+      }
     }
     base.partial = (base.financials?.length ?? 0) === 0;
     base.syncedAt = new Date().toISOString();
@@ -110,6 +130,45 @@ export async function GET(req: Request) {
     const key = normName(f.company);
     const already = [...bySlug.values()].some((r) => normName(r.company) === key);
     if (already) continue;
+    // Near-dup detection: exact match missed (&/and, Co./Company variants).
+    // >=0.85 + same window -> auto-merge; 0.6+ -> flag for review, skip insert.
+    let dupSlug: string | null = null;
+    let best = 0;
+    for (const [slug, r] of bySlug) {
+      if (slug.startsWith("_pipeline")) continue;
+      const sim = tokenOverlap(key, normName(r.company));
+      if (sim > best) {
+        best = sim;
+        dupSlug = slug;
+      }
+    }
+    if (best >= 0.85 && dupSlug) {
+      const hit = bySlug.get(dupSlug)!;
+      const hd = hit.data as IpoSeed;
+      if (!hd.openDate && f.openDate) hd.openDate = f.openDate;
+      if (!hd.closeDate && f.closeDate) hd.closeDate = f.closeDate;
+      hd.syncedAt = new Date().toISOString();
+      await q`UPDATE ipo SET data = ${JSON.stringify(hd)}::jsonb, updated_at = NOW() WHERE slug = ${dupSlug}`;
+      touched.add(dupSlug);
+      note({ kind: "dup-merged", slug: dupSlug, detail: `"${f.company}" ~= "${hd.company}" (${Math.round(best * 100)}%)` });
+      continue;
+    }
+    // 0.75+ with identical windows is the same issue wearing a different name
+    const hitRow = dupSlug ? bySlug.get(dupSlug)! : null;
+    const hitData = hitRow ? (hitRow.data as IpoSeed) : null;
+    const sameWindow = Boolean(hitData && f.openDate && f.closeDate && hitData.openDate === f.openDate && hitData.closeDate === f.closeDate);
+    if (best >= 0.75 && sameWindow && dupSlug && hitData) {
+      if (!hitData.symbol && (f as { symbol?: string }).symbol) hitData.symbol = (f as { symbol?: string }).symbol!;
+      hitData.syncedAt = new Date().toISOString();
+      await q`UPDATE ipo SET data = ${JSON.stringify(hitData)}::jsonb, updated_at = NOW() WHERE slug = ${dupSlug}`;
+      touched.add(dupSlug);
+      note({ kind: "dup-merged", slug: dupSlug, detail: `"${f.company}" ~= "${hitData.company}" (${Math.round(best * 100)}%, same window)` });
+      continue;
+    }
+    if (best >= 0.6 && dupSlug) {
+      note({ kind: "dup-candidate", slug: dupSlug, detail: `"${f.company}" ~= "${(bySlug.get(dupSlug)!.data as IpoSeed).company}" (${Math.round(best * 100)}%) — skipped insert` });
+      continue;
+    }
     const slug = slugify(f.company);
     if (bySlug.has(slug)) continue;
     const base = nseToPartial(
@@ -169,7 +228,7 @@ export async function GET(req: Request) {
   // enrichment later exhausts the function budget.
   const beat = (extra: object) => q`
     INSERT INTO ipo (slug, company, status, data)
-    VALUES ('_pipeline_heartbeat', '_pipeline', 'listed', ${JSON.stringify({ at: new Date().toISOString(), nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, ...extra })}::jsonb)
+    VALUES ('_pipeline_heartbeat', '_pipeline', 'listed', ${JSON.stringify({ at: new Date().toISOString(), nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, anomalies, ...extra })}::jsonb)
     ON CONFLICT (slug) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
   `;
   await beat({ phase: "sync-done", docsParsed: 0, listingsFixed: 0, newsCached: 0, timedOut: false });
@@ -295,11 +354,16 @@ export async function GET(req: Request) {
       const facts = await resolveListing(d.company, d.priceMax);
       tavilySpent += 1;
       if (facts.price) {
-        d.listingPrice = facts.price;
-        if (facts.gainPct != null) d.listingGainPct = facts.gainPct;
-        if (facts.date && !d.listingDate) d.listingDate = facts.date;
-        listingsFixed++;
-        dirty = true;
+        const lg = guardListingPrice(facts.price, facts.gainPct, d.priceMax);
+        if (!lg.ok) {
+          note({ kind: "listing-rejected", slug: r.slug, detail: lg.reason ?? "" });
+        } else {
+          d.listingPrice = facts.price;
+          if (facts.gainPct != null) d.listingGainPct = facts.gainPct;
+          if (facts.date && !d.listingDate) d.listingDate = facts.date;
+          listingsFixed++;
+          dirty = true;
+        }
       }
     }
 
@@ -353,5 +417,6 @@ export async function GET(req: Request) {
     indexed = await indexNowPing(paths).catch(() => 0);
   }
 
-  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, tavilySpent, timedOut, revalidated: revalidated.length, touched: touched.size, indexed, telegram });
+  const dbRows = (await q`SELECT count(*)::int AS n FROM ipo WHERE slug NOT LIKE '_pipeline%'`)[0] as { n: number };
+  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, tavilySpent, timedOut, revalidated: revalidated.length, touched: touched.size, indexed, telegram, anomalies: anomalies.length, dbRows: dbRows.n });
 }

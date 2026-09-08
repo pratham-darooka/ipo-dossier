@@ -65,6 +65,25 @@ export default async function StatusPage() {
         </div>
       </div>
 
+      <h2 className="font-display mt-10 text-3xl font-black">Needs attention</h2>
+      {(() => {
+        const list = Array.isArray((sync as Record<string, unknown> | null)?.anomalies)
+          ? ((sync as Record<string, unknown>).anomalies as { at?: string; kind?: string; slug?: string; detail?: string }[])
+          : [];
+        if (!list.length) return <p className="mt-3 text-sm opacity-60">Clean — last run blocked nothing and flagged nothing.</p>;
+        return (
+          <div className="mt-4 space-y-2">
+            {list.slice(0, 20).map((a, i) => (
+              <div key={i} className="rounded-2xl border border-[#E8C15A]/30 bg-[#E8C15A]/5 px-4 py-3 font-mono2 text-xs">
+                <b>{String(a.kind ?? "anomaly")}</b>
+                {a.slug ? <> · <Link href={`/ipo/${a.slug}`} className="underline decoration-[#D4FF4F] underline-offset-4">{a.slug}</Link></> : null}
+                <span className="opacity-70"> · {String(a.detail ?? "")}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       <h2 className="font-display mt-10 text-3xl font-black">Per-IPO progress</h2>
       <div className="mt-4 space-y-3">
         {s.rows.map((r) => (
