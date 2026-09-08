@@ -78,7 +78,9 @@ export async function getAllIpos(): Promise<IpoSeed[]> {
     if (await dbReady()) {
       const rows = await listIpos(null);
       if (rows && rows.length) {
-        const dbSeeds = rows.map(asSeed).filter((s): s is IpoSeed => s !== null && s.slug !== "_pipeline_heartbeat");
+        const dbSeeds = rows
+          .map(asSeed)
+          .filter((s): s is IpoSeed => s !== null && !s.slug.startsWith("_pipeline"));
         if (dbSeeds.length) {
           const seen = new Set<string>();
           const merged: IpoSeed[] = [];
