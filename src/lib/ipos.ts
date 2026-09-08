@@ -44,9 +44,15 @@ export function nseToPartial(u: NseUpcoming, live?: NseLive, status?: IpoSeed["s
 function asSeed(row: Record<string, unknown>): IpoSeed | null {
   const d = row.data as Partial<IpoSeed> | null;
   if (!d || typeof d !== "object") return null;
-  if (!d.slug || !d.company) return null;
+  // Defense in depth: a row with a valid slug column must never vanish from the API
+  // just because its JSON blob is missing the field (see vinod-texworld, Sep 8).
+  const slug = d.slug || (row.slug as string);
+  const company = d.company || (row.company as string);
+  if (!slug || !company) return null;
   return {
     ...(d as IpoSeed),
+    slug,
+    company,
     status: (row.status as IpoSeed["status"]) ?? (d as IpoSeed).status,
     syncedAt: typeof row.updated_at === "string" ? row.updated_at : (d as IpoSeed).syncedAt,
   };
