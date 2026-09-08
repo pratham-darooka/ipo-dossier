@@ -49,13 +49,24 @@ function asSeed(row: Record<string, unknown>): IpoSeed | null {
   const slug = d.slug || (row.slug as string);
   const company = d.company || (row.company as string);
   if (!slug || !company) return null;
-  return {
-    ...(d as IpoSeed),
+  const dd = d as IpoSeed;
+  // Normalize: rows written by older code paths may lack sub-objects the UI reads.
+  // A present row must always render — never crash a page build.
+  const safe: IpoSeed = {
+    ...(dd as IpoSeed),
     slug,
     company,
-    status: (row.status as IpoSeed["status"]) ?? (d as IpoSeed).status,
-    syncedAt: typeof row.updated_at === "string" ? row.updated_at : (d as IpoSeed).syncedAt,
+    status: (row.status as IpoSeed["status"]) ?? dd.status,
+    syncedAt: typeof row.updated_at === "string" ? row.updated_at : dd.syncedAt,
+    subscription: dd.subscription ?? { qib: 0, nii: 0, retail: 0, employee: 0, total: 0 },
+    gmp: dd.gmp ?? { value: 0, pct: 0 },
+    financials: dd.financials ?? [],
+    peers: dd.peers ?? [],
+    risks: dd.risks ?? [],
+    objectsOfIssue: dd.objectsOfIssue ?? [],
+    leadManagers: dd.leadManagers ?? [],
   };
+  return safe;
 }
 
 /**
