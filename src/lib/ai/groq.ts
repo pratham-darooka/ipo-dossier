@@ -1,4 +1,6 @@
 import Groq from "groq-sdk";
+import { geminiChat } from "./gemini";
+import { openrouterChat } from "./openrouter";
 
 // Primary + fallbacks. If rate limits (or a retired model ID) bite, we rotate.
 // qwen thinks out loud — <think> blocks are stripped before parsing.
@@ -15,30 +17,35 @@ function clean(text: string): string {
 }
 
 async function chat(opts: { system: string; user: string; maxTokens: number; json?: boolean; temperature?: number }): Promise<string | null> {
+  // Provider order: Groq (fast, free) -> Gemini (fallback) -> OpenRouter free-tier (last resort).
+  // Each layer degrades silently; callers only see string | null.
   const c = client();
-  if (!c) return null;
-  let lastErr: unknown = null;
-  for (const model of MODELS) {
-    try {
-      const res = await c.chat.completions.create({
-        model,
-        temperature: opts.temperature ?? 0.3,
-        max_tokens: opts.maxTokens,
-        messages: [
-          { role: "system", content: opts.system },
-          { role: "user", content: opts.user },
-        ],
-        ...(opts.json ? { response_format: { type: "json_object" as const } } : {}),
-      });
-      const text = clean(res.choices?.[0]?.message?.content ?? "");
-      if (text) return text;
-    } catch (e) {
-      lastErr = e;
-      continue; // 429 / 5xx / retired model -> next model
+  if (c) {
+    let lastErr: unknown = null;
+    for (const model of MODELS) {
+      try {
+        const res = await c.chat.completions.create({
+          model,
+          temperature: opts.temperature ?? 0.3,
+          max_tokens: opts.maxTokens,
+          messages: [
+            { role: "system", content: opts.system },
+            { role: "user", content: opts.user },
+          ],
+          ...(opts.json ? { response_format: { type: "json_object" as const } } : {}),
+        });
+        const text = clean(res.choices?.[0]?.message?.content ?? "");
+        if (text) return text;
+      } catch (e) {
+        lastErr = e;
+        continue; // 429 / 5xx / retired model -> next model
+      }
     }
+    console.warn("[groq] all models failed", lastErr instanceof Error ? lastErr.message.slice(0, 160) : lastErr);
   }
-  console.warn("[groq] all models failed", lastErr instanceof Error ? lastErr.message.slice(0, 160) : lastErr);
-  return null;
+  const g = await geminiChat(opts);
+  if (g) return g;
+  return openrouterChat(opts);
 }
 
 export type VerdictDuo = {
@@ -111,4 +118,9 @@ export async function groqJson(system: string, user: string, maxTokens = 1200): 
 
 export function groqConfigured() {
   return Boolean(process.env.GROQ_API_KEY);
+}
+
+/** Any AI provider ready (Groq, Gemini, or OpenRouter-free). */
+export function aiConfigured() {
+  return groqConfigured() || Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY) || Boolean(process.env.OPENROUTER_API_KEY);
 }
