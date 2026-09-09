@@ -1,11 +1,14 @@
 // OpenRouter fallback (provider #3). FREE models only — never spend a cent.
-// Models: OPENROUTER_MODELS (comma-separated) or built-in free-tier rotation.
-// Key: OPENROUTER_API_KEY. Free-tier models retire often; rotation + env override keeps us alive.
+// Rotation proven 2026-09-09: nex-n2.5-pro + nemotron-3-super = perfect JSON ~1-2s.
+// AVOID nemotron-3-ultra (hangs 150s upstream) and inkling (403, harness-only).
+// Free-tier models retire often; rotation + env override keeps us alive.
 
 const DEFAULT_FREE = [
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "qwen/qwen-2.5-72b-instruct:free",
-  "google/gemma-3-27b-it:free",
+  "nex-agi/nex-n2.5-pro:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "google/gemma-4-31b-it:free",
+  "inclusionai/ling-3.0-flash-fin:free",
+  "poolside/laguna-s-2.1:free",
 ];
 
 function models(): string[] {
@@ -27,10 +30,12 @@ export async function openrouterChat(opts: {
   const key = process.env.OPENROUTER_API_KEY;
   if (!key) return null;
   for (const model of models()) {
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 60000);
-      const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 4000)); // one breather retry on rate limits
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 45000); // hung upstreams (seen: 150s) must never eat the budget
+        const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -50,13 +55,15 @@ export async function openrouterChat(opts: {
         }),
         signal: ctrl.signal,
       });
-      clearTimeout(t);
-      if (!r.ok) continue;
-      const j = (await r.json()) as { choices?: { message?: { content?: string } }[] };
-      const text = (j.choices?.[0]?.message?.content ?? "").replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-      if (text) return text;
-    } catch {
-      continue;
+        clearTimeout(t);
+        if (r.status === 404 || r.status === 400 || r.status === 401 || r.status === 403) break; // dead model/key — don't waste the retry
+        if (!r.ok) continue; // 429/5xx — retry once, then next model
+        const j = (await r.json()) as { choices?: { message?: { content?: string } }[] };
+        const text = (j.choices?.[0]?.message?.content ?? "").replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+        if (text) return text;
+      } catch {
+        continue;
+      }
     }
   }
   return null;

@@ -16,36 +16,82 @@ function clean(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 }
 
+/**
+ * Repair common model output damage: markdown fences, preamble chatter, trailing
+ * commentary, truncated tails. Returns the largest balanced {...} block, else "".
+ */
+export function extractJson(text: string): string {
+  const s = clean(text).replace(/```(?:json)?/gi, "").trim();
+  const start = s.indexOf("{");
+  if (start < 0) return "";
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return ""; // truncated — caller treats as miss and rotates
+}
+
 async function chat(opts: { system: string; user: string; maxTokens: number; json?: boolean; temperature?: number }): Promise<string | null> {
   // Provider order: Groq (fast, free) -> Gemini (fallback) -> OpenRouter free-tier (last resort).
+  // AI_PROVIDER=groq|gemini|openrouter pins the FIRST attempt (still falls through on failure).
   // Each layer degrades silently; callers only see string | null.
-  const c = client();
-  if (c) {
-    let lastErr: unknown = null;
-    for (const model of MODELS) {
-      try {
-        const res = await c.chat.completions.create({
-          model,
-          temperature: opts.temperature ?? 0.3,
-          max_tokens: opts.maxTokens,
-          messages: [
-            { role: "system", content: opts.system },
-            { role: "user", content: opts.user },
-          ],
-          ...(opts.json ? { response_format: { type: "json_object" as const } } : {}),
-        });
-        const text = clean(res.choices?.[0]?.message?.content ?? "");
-        if (text) return text;
-      } catch (e) {
-        lastErr = e;
-        continue; // 429 / 5xx / retired model -> next model
+  const pin = (process.env.AI_PROVIDER || "").toLowerCase();
+  const order: ("groq" | "gemini" | "openrouter")[] =
+    pin === "gemini" ? ["gemini", "groq", "openrouter"]
+    : pin === "openrouter" ? ["openrouter", "groq", "gemini"]
+    : ["groq", "gemini", "openrouter"];
+  for (const p of order) {
+    if (p === "groq") {
+      const c = client();
+      if (c) {
+        let lastErr: unknown = null;
+        for (const model of MODELS) {
+          for (let attempt = 0; attempt < 2; attempt++) {
+            if (attempt > 0) await new Promise((r) => setTimeout(r, 4000));
+            try {
+              const res = await c.chat.completions.create({
+                model,
+                temperature: opts.temperature ?? 0.3,
+                max_tokens: opts.maxTokens,
+                messages: [
+                  { role: "system", content: opts.system },
+                  { role: "user", content: opts.user },
+                ],
+                ...(opts.json ? { response_format: { type: "json_object" as const } } : {}),
+              });
+              const text = clean(res.choices?.[0]?.message?.content ?? "");
+              if (text) return text;
+            } catch (e) {
+              lastErr = e;
+              const status = (e as { status?: number })?.status;
+              if (status === 404 || status === 400 || status === 401) break; // dead model/key — next model
+              continue; // 429/5xx — retry once, then next model
+            }
+          }
+        }
+        console.warn("[groq] all models failed", lastErr instanceof Error ? lastErr.message.slice(0, 160) : lastErr);
       }
+    } else if (p === "gemini") {
+      const g = await geminiChat(opts);
+      if (g) return g;
+    } else {
+      const o = await openrouterChat(opts);
+      if (o) return o;
     }
-    console.warn("[groq] all models failed", lastErr instanceof Error ? lastErr.message.slice(0, 160) : lastErr);
   }
-  const g = await geminiChat(opts);
-  if (g) return g;
-  return openrouterChat(opts);
+  return null;
 }
 
 export type VerdictDuo = {
@@ -55,14 +101,34 @@ export type VerdictDuo = {
   redFlags: string[];
 };
 
-const SYSTEM = `You are an IPO research analyst for Indian mainboard IPOs. You are educational, never give guaranteed buy/sell advice.
-Rules:
-- Use ONLY the numbers provided in the user JSON. If a field is missing/zero, say "not disclosed yet".
-- Treat GMP as unofficial sentiment, never as a guarantee. Warn when GMP diverges from fundamentals.
-- Output TWO separate takes: (1) Listing-Gain Trader (3-10 day horizon: GMP trend, subscription esp QIB, anchor, issue size, market mood) (2) Long-Term Investor (2-3yr: growth, margins, cash conversion CFO vs PAT, valuation vs peers, promoter, use of proceeds, risks).
-- Scores 0-10. Verdicts: APPLY / NEUTRAL / AVOID.
-- Return STRICT JSON only, no markdown, no thinking preamble: {"listing":{"score":n,"verdict":"...","reasons":["...","...","..."],"action":"..."},"longterm":{"score":n,"verdict":"...","reasons":["...","...","..."],"action":"..."},"oneLiner":"...","redFlags":["..."]}
-- Actions must be concrete: e.g. listing: "Apply 1 lot, book 50% on listing pop, trail rest with cost stop" / longterm: "Skip now, revisit Q2 post-listing below ₹X if margins hold".`;
+const SYSTEM = `You are a senior equity research analyst covering Indian mainboard IPOs on NSE/BSE. Your reader is a retail investor deciding whether to apply. You are educational: thorough, specific, never guaranteeing outcomes, never giving assured buy/sell calls.
+
+MARKET MECHANICS YOU MUST RESPECT
+- Timeline: 3-day bidding window -> allotment ~T+1 -> listing ~T+3. Retail allotment in oversubscribed issues is a computerised lottery per lot; HNI (NII) allotment is proportional.
+- Bidder classes: QIB (institutions, allotted proportionally, bids Day 3 typically, smart money), NII/sNII/bNII (HNI leverage bids), Retail (lottery), Employee (often discounted).
+- Demand read: QIB multiple is the strongest quality signal. Total subscription without QIB strength is hype. Day-1 QIB below 1x is a red flag; above 10x is strong.
+- GMP (grey market premium) is UNOFFICIAL, unregulated, volatile intraday sentiment — informative, never a promise. A positive GMP can and does invert by listing. Always caveat GMP explicitly when citing it.
+- Issue structure: fresh issue % funds the company (growth); OFS % exits promoters/investors. >60% fresh is a green flag; <25% fresh means you are mostly buying someone out.
+- Valuation: compare against listed peers on PE/PB/ROE, never in isolation. A 20%+ premium to peers needs visibly superior growth or margins.
+- Earnings quality: CFO/PAT near 1.0 = cash-backed profits. Below 0.5 sustained = profits not converting — a major red flag. Thin sub-3% PAT margins in commodity businesses are fragile.
+- Promoters: high post-issue holding (65%+) aligns incentives; heavy pre-IPO placements or large OFS = exit smell. Related-party exposure and contingent liabilities live in DRHP footnotes — surface them.
+
+SCORING RUBRIC (0-10 each, one decimal allowed)
+- Listing score: subscription momentum 40% (total + QIB weight), GMP trend 20%, anchor quality 15%, issue size/liquidity 10%, market/sector mood 15%. 8+ = strong pop setup; 5-7 = conditional; below 5 = skip for listing.
+- Long-term score: revenue growth + margin trajectory 30%, cash conversion 20%, valuation vs peers 20%, promoter/governance 15%, use of proceeds 15%. 8+ = compounder candidate; 5-7 = watchlist; below 5 = avoid for portfolio.
+
+GROUNDING RULES (VIOLATIONS INVALIDATE YOUR ANSWER)
+- Use ONLY numbers present in the user JSON. Never invent subscription figures, financials, peers, dates, or GMP.
+- A value of 0, null, or missing means NOT DISCLOSED YET — say so explicitly ("QIB not disclosed yet") and score that dimension neutral (5/10 contribution), never zero, never optimistic.
+- If subscription.total is 0 and status is upcoming, the issue hasn't opened: judge the listing setup on structure + valuation only, and say the demand verdict unlocks Day 1.
+- If the company already listed (listingPrice present), the listing verdict is retrospective — grade the call, don't pretend to predict it.
+- Keep every reason under 140 characters, specific (cite the number), no filler, no repetition across reasons.
+
+OUTPUT CONTRACT — STRICT JSON ONLY, no markdown fences, no preamble, no trailing commentary:
+{"listing":{"score":n,"verdict":"APPLY|NEUTRAL|AVOID","reasons":["r1","r2","r3"],"action":"..."},"longterm":{"score":n,"verdict":"APPLY|NEUTRAL|AVOID","reasons":["r1","r2","r3"],"action":"..."},"oneLiner":"single sentence capturing the essence, ≤160 chars","redFlags":["concrete risk 1","concrete risk 2"]}
+- Exactly 3 reasons per side. Verdict thresholds: score >= 7 APPLY, 5-7 NEUTRAL, below 5 AVOID.
+- Actions must be concrete and horizon-correct. Listing example: "Apply 1 lot; book 50% on a 30%+ pop, trail rest at cost." Long-term example: "Skip at this valuation; revisit 2 quarters post-listing under ₹X if margins hold."
+- redFlags: only concrete, filing-grounded risks (concentration %, leverage, litigation, RPT exposure). Empty array if none — never pad.`;
 
 export async function groqVerdict(ipoJson: unknown): Promise<VerdictDuo | null> {
   const text = await chat({
@@ -73,7 +139,14 @@ export async function groqVerdict(ipoJson: unknown): Promise<VerdictDuo | null> 
   });
   if (!text) return null;
   try {
-    return JSON.parse(text) as VerdictDuo;
+    const v = JSON.parse(extractJson(text) || text) as VerdictDuo;
+    if (typeof v?.listing?.score !== "number" || typeof v?.longterm?.score !== "number" || typeof v?.oneLiner !== "string") return null;
+    v.listing.score = Math.min(10, Math.max(0, v.listing.score));
+    v.longterm.score = Math.min(10, Math.max(0, v.longterm.score));
+    if (!Array.isArray(v.listing.reasons)) v.listing.reasons = [];
+    if (!Array.isArray(v.longterm.reasons)) v.longterm.reasons = [];
+    if (!Array.isArray(v.redFlags)) v.redFlags = [];
+    return v;
   } catch {
     return null;
   }
@@ -81,8 +154,8 @@ export async function groqVerdict(ipoJson: unknown): Promise<VerdictDuo | null> 
 
 export async function groqSummarize(prompt: string, context: string): Promise<string | null> {
   return chat({
-    system: "You summarize Indian IPO filings in plain language. No investment advice. Cite missing data as unknown. No preamble, no thinking.",
-    user: `${prompt}\n\nContext:\n${context.slice(0, 12000)}`,
+    system: "You are a precise financial summarizer for Indian markets. Rules: answer ONLY from the provided context; if the answer is absent say UNKNOWN; numbers must be quoted exactly as written (preserve ₹, %, x multiples); no investment advice; no preamble, no hedging phrases, no trailing commentary — output only the requested artifact.",
+    user: `${prompt}\n\nContext (only source of truth):\n${context.slice(0, 12000)}`,
     maxTokens: 1000,
     temperature: 0.4,
   });
@@ -99,7 +172,7 @@ export async function groqExtractFiling(excerpt: string): Promise<Record<string,
   });
   if (!text) return null;
   try {
-    return JSON.parse(text) as Record<string, unknown>;
+    return JSON.parse(extractJson(text) || text) as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -110,7 +183,7 @@ export async function groqJson(system: string, user: string, maxTokens = 1200): 
   const text = await chat({ system, user, maxTokens, json: true, temperature: 0.7 });
   if (!text) return null;
   try {
-    return JSON.parse(text) as Record<string, unknown>;
+    return JSON.parse(extractJson(text) || text) as Record<string, unknown>;
   } catch {
     return null;
   }
