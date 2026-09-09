@@ -8,6 +8,21 @@ import { deepDiveDoc, resolveDocUrl } from "@/lib/docs";
 import { pressEnrich } from "@/lib/enrich";
 import { indexNowPing } from "@/lib/indexnow";
 import { guardSubscription, guardListingPrice, guardBand, guardStatus, tokenOverlap, type Anomaly } from "@/lib/guards";
+
+/** Fold every non-empty field from src into dst. Returns keys taken. */
+function richestMerge(dst: IpoSeed, src: Partial<IpoSeed>): string[] {
+  const taken: string[] = [];
+  for (const key of Object.keys(src) as (keyof IpoSeed)[]) {
+    const kv = dst[key];
+    const sv = src[key];
+    const empty = kv === 0 || kv === "" || kv == null || (Array.isArray(kv) && !kv.length);
+    if (empty && sv !== undefined && JSON.stringify(sv) !== JSON.stringify(kv)) {
+      (dst as Record<string, unknown>)[key as string] = sv;
+      taken.push(key as string);
+    }
+  }
+  return taken;
+}
 import { chittorgarhLinks, parseChittorgarhIpo } from "@/lib/chittorgarh-ipo";
 import { briefText, postTelegram } from "@/lib/social/telegram";
 import { resolveListing } from "@/lib/listings";
@@ -62,6 +77,11 @@ export async function GET(req: Request) {
 
   // --- 1. NSE calendar + live demand overlay (cheap, all rows) ---
   for (const u of upcoming) {
+    // Mainboard-only site: SME series rows are skipped, never inserted
+    if (u.series && u.series !== "EQ") {
+      note({ kind: "sme-skipped", slug: "-", detail: `${u.symbol} (${u.company}) series ${u.series}` });
+      continue;
+    }
     const key = normName(u.company);
     const liveHit: NseLive | undefined = liveBySymbol.get(u.symbol) ?? liveByName.get(key);
     const status = nseStatusToOurs(u.status, u.closeDate);
@@ -145,8 +165,7 @@ export async function GET(req: Request) {
     if (best >= 0.85 && dupSlug) {
       const hit = bySlug.get(dupSlug)!;
       const hd = hit.data as IpoSeed;
-      if (!hd.openDate && f.openDate) hd.openDate = f.openDate;
-      if (!hd.closeDate && f.closeDate) hd.closeDate = f.closeDate;
+      richestMerge(hd, { company: f.company, openDate: f.openDate, closeDate: f.closeDate } as Partial<IpoSeed>);
       hd.syncedAt = new Date().toISOString();
       await q`UPDATE ipo SET data = ${JSON.stringify(hd)}::jsonb, updated_at = NOW() WHERE slug = ${dupSlug}`;
       touched.add(dupSlug);
@@ -172,7 +191,7 @@ export async function GET(req: Request) {
     const slug = slugify(f.company);
     if (bySlug.has(slug)) continue;
     const base = nseToPartial(
-      { symbol: "", company: f.company, openDate: f.openDate, closeDate: f.closeDate, priceMin: null, priceMax: null, issueSizeShares: null, status: "" },
+      { symbol: "", company: f.company, openDate: f.openDate, closeDate: f.closeDate, priceMin: null, priceMax: null, issueSizeShares: null, status: "", series: "" },
       undefined,
       "upcoming"
     );
@@ -249,6 +268,8 @@ export async function GET(req: Request) {
   let timedOut = false;
 
   for (const r of all) {
+    // Excluded rows (e.g. SME misfiling) are left untouched by automation
+    if ((r.data as IpoSeed & { excluded?: boolean }).excluded) continue;
     if (!enrich || Date.now() > DEADLINE) {
       if (enrich && Date.now() > DEADLINE) timedOut = true;
       break;

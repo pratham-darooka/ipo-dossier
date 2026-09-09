@@ -80,7 +80,8 @@ export async function getAllIpos(): Promise<IpoSeed[]> {
       if (rows && rows.length) {
         const dbSeeds = rows
           .map(asSeed)
-          .filter((s): s is IpoSeed => s !== null && !s.slug.startsWith("_pipeline"));
+          .filter((s): s is IpoSeed => s !== null && !s.slug.startsWith("_pipeline"))
+          .filter((s) => !(s as IpoSeed & { excluded?: boolean }).excluded);
         if (dbSeeds.length) {
           const seen = new Set<string>();
           const merged: IpoSeed[] = [];

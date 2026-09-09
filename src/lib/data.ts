@@ -16,6 +16,8 @@ export type IpoSeed = {
   drhpUrl?: string; rhpUrl?: string;
   // Live-pipeline fields: NSE-only rows arrive without filing data until enriched.
   partial?: boolean; syncedAt?: string; symbol?: string;
+  // Excluded rows (e.g. SME misfiled on a mainboard board) are hidden from public lists.
+  excluded?: boolean;
   // Past-IPO facts (listing day truth).
   listingPrice?: number; listingGainPct?: number;
   listingDay?: { open: number; high: number; low: number; close: number };

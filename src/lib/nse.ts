@@ -15,6 +15,7 @@ export type NseUpcoming = {
   priceMax: number | null;
   issueSizeShares: number | null;
   status: string; // Active | Closed | Forthcoming
+  series: string; // EQ for mainboard; SME rows carry other series and must be skipped
 };
 
 export type NseLive = {
@@ -72,7 +73,7 @@ export async function fetchNseUpcoming(): Promise<NseUpcoming[]> {
   return rows
     .filter((r) => r && typeof r === "object" && (r as { symbol?: string }).symbol)
     .map((r) => {
-      const row = r as { companyName?: string; symbol?: string; issueStartDate?: string; issueEndDate?: string; issuePrice?: string; issueSize?: string; status?: string };
+      const row = r as { companyName?: string; symbol?: string; issueStartDate?: string; issueEndDate?: string; issuePrice?: string; issueSize?: string; status?: string; series?: string };
       const [priceMin, priceMax] = parseBand(row.issuePrice);
       return {
         symbol: (row.symbol ?? "").trim(),
@@ -83,6 +84,7 @@ export async function fetchNseUpcoming(): Promise<NseUpcoming[]> {
         priceMax,
         issueSizeShares: row.issueSize ? Number(String(row.issueSize).replace(/[^0-9]/g, "")) || null : null,
         status: (row.status ?? "").trim(),
+        series: (row.series ?? "").trim(),
       };
     });
 }
