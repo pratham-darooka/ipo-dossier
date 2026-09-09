@@ -13,10 +13,14 @@ export async function GET(req: Request) {
   const data = status ? all.filter((i) => i.status === status) : all;
   const live = all.some((i) => i.syncedAt);
   let dbRows: number | null = null;
+  let excluded = 0;
   try {
     if (await dbReady()) {
-      const rows = (await sql()!`SELECT count(*)::int AS n FROM ipo WHERE slug NOT LIKE '_pipeline%'`) as { n: number }[];
+      const q = sql()!;
+      const rows = (await q`SELECT count(*)::int AS n FROM ipo WHERE slug NOT LIKE '_pipeline%'`) as { n: number }[];
       dbRows = rows[0]?.n ?? null;
+      const ex = (await q`SELECT count(*)::int AS n FROM ipo WHERE slug NOT LIKE '_pipeline%' AND data->>'excluded' = 'true'`) as { n: number }[];
+      excluded = ex[0]?.n ?? 0;
     }
   } catch { /* observability is best-effort */ }
   return NextResponse.json({
@@ -24,6 +28,8 @@ export async function GET(req: Request) {
     source: live ? "neon" : "seed",
     count: data.length,
     dbRows,
+    excluded,
+    reconciled: dbRows == null ? null : data.length + excluded >= dbRows && data.length <= dbRows,
     servedAt: new Date().toISOString(),
     data,
   });
