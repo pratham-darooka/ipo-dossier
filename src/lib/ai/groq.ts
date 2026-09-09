@@ -43,9 +43,10 @@ export function extractJson(text: string): string {
   return ""; // truncated — caller treats as miss and rotates
 }
 
-async function chat(opts: { system: string; user: string; maxTokens: number; json?: boolean; temperature?: number }): Promise<string | null> {
+async function chat(opts: { system: string; user: string; maxTokens: number; json?: boolean; temperature?: number; systemCompact?: string }): Promise<string | null> {
   // Provider order: Groq (fast, free) -> Gemini (fallback) -> OpenRouter free-tier (last resort).
   // AI_PROVIDER=groq|gemini|openrouter pins the FIRST attempt (still falls through on failure).
+  // Small-model providers receive systemCompact when supplied (they follow short contracts better).
   // Each layer degrades silently; callers only see string | null.
   const pin = (process.env.AI_PROVIDER || "").toLowerCase();
   const order: ("groq" | "gemini" | "openrouter")[] =
@@ -133,6 +134,12 @@ OUTPUT CONTRACT — STRICT JSON ONLY, no markdown fences, no preamble, no traili
 export async function groqVerdict(ipoJson: unknown): Promise<VerdictDuo | null> {
   const text = await chat({
     system: SYSTEM,
+    // Compact contract for small-model providers: same rules, shorter brief.
+    systemCompact: `You are a senior equity analyst for Indian mainboard IPOs (NSE/BSE). Reader: retail investor. Educational only — never guarantee outcomes, never give assured buy/sell calls.
+MECHANICS: 3-day bidding; retail allotment is a lottery when oversubscribed; QIB multiple = strongest quality signal (Day-1 QIB <1x red flag, >10x strong); GMP is UNOFFICIAL volatile sentiment, never a promise — always caveat it; fresh-issue % funds growth (>60% green flag), OFS % exits holders (<25% fresh = mostly exit); compare valuation vs listed peers, never alone; CFO/PAT near 1.0 = quality, below 0.5 sustained = red flag; promoter holding 65%+ aligns incentives.
+SCORING 0-10: listing = demand 40% + GMP 20% + anchors 15% + size 10% + mood 15%. Long-term = growth+margins 30% + cash 20% + valuation 20% + governance 15% + proceeds 15%. >=7 APPLY, 5-7 NEUTRAL, <5 AVOID.
+GROUNDING: use ONLY numbers in the user JSON. 0/null/missing = NOT DISCLOSED — say so, score neutral, never invent. Upcoming + total 0 = not opened: judge structure/valuation only, demand unlocks Day 1. Already listed = grade retrospectively.
+OUTPUT STRICT JSON ONLY, no fences/preamble: {"listing":{"score":n,"verdict":"APPLY|NEUTRAL|AVOID","reasons":["3 specific reasons ≤140 chars, cite numbers","...","..."],"action":"concrete listing action"},"longterm":{"score":n,"verdict":"APPLY|NEUTRAL|AVOID","reasons":["...","...","..."],"action":"concrete 2-3yr action"},"oneLiner":"essence ≤160 chars","redFlags":["concrete risk"]}. Exactly 3 reasons per side.`,
     user: `Analyze this IPO JSON and return the verdict duo:\n${JSON.stringify(ipoJson).slice(0, 9000)}`,
     maxTokens: 1200,
     json: true,
