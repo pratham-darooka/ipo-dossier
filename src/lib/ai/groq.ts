@@ -73,7 +73,10 @@ async function chat(opts: { system: string; user: string; maxTokens: number; jso
                 ...(opts.json ? { response_format: { type: "json_object" as const } } : {}),
               });
               const text = clean(res.choices?.[0]?.message?.content ?? "");
-              if (text) return text;
+              if (text) {
+                lastServedBy = `groq:${model}`;
+                return text;
+              }
             } catch (e) {
               lastErr = e;
               const status = (e as { status?: number })?.status;
@@ -86,10 +89,16 @@ async function chat(opts: { system: string; user: string; maxTokens: number; jso
       }
     } else if (p === "gemini") {
       const g = await geminiChat(opts);
-      if (g) return g;
+      if (g) {
+        lastServedBy = "gemini";
+        return g;
+      }
     } else {
       const o = await openrouterChat(opts);
-      if (o) return o;
+      if (o) {
+        lastServedBy = "openrouter";
+        return o;
+      }
     }
   }
   return null;
@@ -199,6 +208,9 @@ export async function groqJson(system: string, user: string, maxTokens = 1200): 
 export function groqConfigured() {
   return Boolean(process.env.GROQ_API_KEY);
 }
+
+/** Last provider+model that served successfully (process-local, for diagnostics). */
+export let lastServedBy: string | null = null;
 
 /** Any AI provider ready (Groq, Gemini, or OpenRouter-free). */
 export function aiConfigured() {

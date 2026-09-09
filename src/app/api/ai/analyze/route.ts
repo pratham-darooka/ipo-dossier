@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { findIpo } from "@/lib/ipos";
 import { dbReady, sql } from "@/lib/db";
 import { scoreListing, scoreLongTerm, verdict } from "@/lib/scoring";
-import { groqVerdict } from "@/lib/ai/groq";
+import { groqVerdict, lastServedBy } from "@/lib/ai/groq";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +60,18 @@ export async function POST(req: Request) {
         }
       }
     } catch { /* cache is best-effort */ }
-    return NextResponse.json({ ok: true, ai: true, cached: false, verdict: ai });
+    return NextResponse.json({
+      ok: true,
+      ai: true,
+      cached: false,
+      servedBy: lastServedBy,
+      providers: {
+        groq: Boolean(process.env.GROQ_API_KEY),
+        gemini: Boolean(process.env.GOOGLE_GENERATIVE_AI_API_KEY),
+        openrouter: Boolean(process.env.OPENROUTER_API_KEY),
+      },
+      verdict: ai,
+    });
   }
   return NextResponse.json({ ok: true, ai: false, verdict: fallback, hint: "Add GROQ_API_KEY to .env for LLM narrative" });
 }
