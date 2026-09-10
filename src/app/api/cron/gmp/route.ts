@@ -25,7 +25,8 @@ export async function GET(req: Request) {
 
   await ensureIpoTable();
   const q = sql()!;
-  const rows = (await q`SELECT slug, company, status, data FROM ipo WHERE status IN ('live','upcoming') AND slug != '_pipeline_heartbeat'`) as {
+  // Excluded rows (SME/unverified) are skipped entirely — no touch, no churn
+  const rows = (await q`SELECT slug, company, status, data FROM ipo WHERE status IN ('live','upcoming') AND slug != '_pipeline_heartbeat' AND (data->>'excluded' IS DISTINCT FROM 'true')`) as {
     slug: string; company: string; status: string; data: IpoSeed;
   }[];
 
