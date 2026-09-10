@@ -10,7 +10,7 @@ export type IpoSeed = {
   freshIssuePct: number; promoterPre: number; promoterPost: number;
   registrar: string; leadManagers: string[]; objectsOfIssue: string[];
   financials: FinancialRow[]; peers: Peer[];
-  subscription: { qib: number; nii: number; retail: number; employee: number; total: number };
+  subscription: { qib: number; nii: number; retail: number; employee: number; total: number; snii?: number; bnii?: number };
   gmp: { value: number; pct: number; source?: string; at?: string; history?: { t: string; value: number }[] };
   anchorPct: number; risks: string[]; about: string;
   drhpUrl?: string; rhpUrl?: string;

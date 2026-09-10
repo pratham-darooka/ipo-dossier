@@ -89,8 +89,53 @@ export async function fetchNseUpcoming(): Promise<NseUpcoming[]> {
     });
 }
 
-export async function fetchNseLive(): Promise<NseLive[]> {
-  const j = (await nseJson("https://www.nseindia.com/api/ipo-current-issue")) as
+export type NseBids = {
+  symbol: string;
+  qib: number | null;
+  nii: number | null;
+  snii: number | null;
+  bnii: number | null;
+  retail: number | null;
+  employee: number | null;
+  total: number | null;
+};
+
+const r2 = (v: unknown): number | null => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+};
+
+/**
+ * Category-wise bids: /api/ipo-bid-details?symbol=X&series=EQ
+ * QIB / NII (+ sNII/bNII split) / Retail / Employee / Total multiples.
+ * NSE keeps serving this for recently-closed issues too — the split source
+ * for both live rows and listed rows that closed inside our tracking window.
+ */
+export async function fetchNseBidDetails(symbol: string): Promise<NseBids | null> {
+  if (!symbol) return null;
+  const j = (await nseJson(
+    `https://www.nseindia.com/api/ipo-bid-details?symbol=${encodeURIComponent(symbol)}&series=EQ`
+  )) as { data?: { category?: string; noOfTime?: string }[] } | null;
+  const rows = j?.data;
+  if (!Array.isArray(rows) || !rows.length) return null;
+  const get = (re: RegExp): number | null => {
+    const row = rows.find((x) => re.test(x?.category ?? ""));
+    return row ? r2(row.noOfTime) : null;
+  };
+  const totalRow = rows.find((x) => /^total$/i.test((x?.category ?? "").trim()));
+  return {
+    symbol,
+    qib: get(/qualified institutional buyers/i),
+    nii: get(/^non institutional investors$/i),
+    snii: get(/two lakh.*ten lakh|small.*nii/i),
+    bnii: get(/ten lakh|big.*nii|more than ten/i),
+    retail: get(/retail individual/i),
+    employee: get(/employee/i),
+    total: totalRow ? r2(totalRow.noOfTime) : null,
+  };
+}
+
+export async function fetchNseLive(): Promise<NseLive[]> {  const j = (await nseJson("https://www.nseindia.com/api/ipo-current-issue")) as
     | { companyName?: string; symbol?: string; noOfsharesBid?: string; noOfSharesOffered?: string; noOfTime?: string }[]
     | null;
   if (!Array.isArray(j)) return [];

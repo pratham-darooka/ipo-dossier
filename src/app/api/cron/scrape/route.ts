@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { dbReady, ensureIpoTable, sql } from "@/lib/db";
-import { fetchNseLive, fetchNseUpcoming, normName, nseStatusToOurs, slugify, type NseLive } from "@/lib/nse";
+import { fetchNseLive, fetchNseUpcoming, fetchNseBidDetails, normName, nseStatusToOurs, slugify, type NseLive } from "@/lib/nse";
 import { fetchChittorgarhForthcoming } from "@/lib/chittorgarh";
 import { nseToPartial } from "@/lib/ipos";
 import { deepDiveDoc, resolveDocUrl } from "@/lib/docs";
@@ -270,6 +270,45 @@ export async function GET(req: Request) {
   const CHIT_BUDGET = 4; // free Chittorgarh page parses/run (no rate limits, just time)
   const DEADLINE = Date.now() + 40000; // leave headroom inside the 60s function limit
   let timedOut = false;
+  let splitsFilled = 0;
+
+  // --- 1c. Category splits (QIB/NII/Retail): NSE bid-details per symbol.
+  // The live feed only carries totals — this is what fills homepage card bars.
+  // Merge-only-up per field (bidding is cumulative); rows without symbols skip free.
+  // Runs before enrichment so demand is fresh even on time-pressed runs.
+  for (const r of all) {
+    if (Date.now() > DEADLINE) {
+      timedOut = true;
+      break;
+    }
+    const d = r.data as IpoSeed & { excluded?: boolean };
+    if (d.excluded || !d.symbol) continue;
+    if (r.status !== "live" && r.status !== "listed") continue;
+    // Listed rows only need this once (final splits); live rows refresh nightly
+    if (r.status === "listed" && d.subscription.qib > 0 && d.subscription.retail > 0) continue;
+    try {
+      const b = await fetchNseBidDetails(d.symbol);
+      if (!b) continue;
+      const s = d.subscription;
+      const nx = {
+        ...s,
+        qib: Math.max(s.qib || 0, b.qib ?? 0),
+        nii: Math.max(s.nii || 0, b.nii ?? 0),
+        retail: Math.max(s.retail || 0, b.retail ?? 0),
+        employee: Math.max(s.employee || 0, b.employee ?? 0),
+        total: Math.max(s.total || 0, b.total ?? 0),
+        snii: b.snii ?? s.snii,
+        bnii: b.bnii ?? s.bnii,
+      };
+      if (JSON.stringify(nx) !== JSON.stringify(s)) {
+        d.subscription = nx;
+        d.syncedAt = new Date().toISOString();
+        await q`UPDATE ipo SET data = ${JSON.stringify(d)}::jsonb, updated_at = NOW() WHERE slug = ${r.slug}`;
+        touched.add(r.slug);
+        splitsFilled++;
+      }
+    } catch { /* per-symbol miss never breaks the run */ }
+  }
 
   for (const r of all) {
     // Excluded rows (e.g. SME misfiling) are left untouched by automation
@@ -399,7 +438,7 @@ export async function GET(req: Request) {
     }
   }
 
-  await beat({ phase: "done", docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, tavilySpent, timedOut });
+  await beat({ phase: "done", docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, splitsFilled, tavilySpent, timedOut });
 
   // Cache invalidation: without this, ISR pages (home 30min, calendar 30min) keep
   // serving pre-sync HTML after status changes (e.g. upcoming -> live). Any write
@@ -443,5 +482,5 @@ export async function GET(req: Request) {
   }
 
   const dbRows = (await q`SELECT count(*)::int AS n FROM ipo WHERE slug NOT LIKE '_pipeline%'`)[0] as { n: number };
-  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, tavilySpent, timedOut, revalidated: revalidated.length, touched: touched.size, indexed, telegram, anomalies: anomalies.length, dbRows: dbRows.n });
+  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, splitsFilled, tavilySpent, timedOut, revalidated: revalidated.length, touched: touched.size, indexed, telegram, anomalies: anomalies.length, dbRows: dbRows.n });
 }

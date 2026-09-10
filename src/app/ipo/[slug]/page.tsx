@@ -155,6 +155,9 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
           <div className="mt-4 rounded-2xl bg-black/5 dark:bg-white/5 p-4 text-sm">
             <b>Anchor:</b> {ipo.anchorPct ? `${ipo.anchorPct}% of issue pre-placed` : "—"} · <b>Registrar:</b> {ipo.registrar || "—"} · <b>Bankers:</b> {ipo.leadManagers.length ? ipo.leadManagers.join(", ") : "—"}
           </div>
+          {(ipo.subscription.snii || ipo.subscription.bnii) ? (
+            <div className="mt-2 font-mono2 text-xs opacity-60">HNI split — sNII (₹2–10L): <b>{ipo.subscription.snii ?? "—"}x</b> · bNII (&gt;₹10L): <b>{ipo.subscription.bnii ?? "—"}x</b></div>
+          ) : null}
         </Reveal>
 
         <Reveal delay={0.1} className="rounded-[2rem] border border-white/10 p-6 md:p-8">
