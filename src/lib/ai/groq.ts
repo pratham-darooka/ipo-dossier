@@ -9,7 +9,8 @@ const MODELS = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"]
 function client() {
   const key = process.env.GROQ_API_KEY;
   if (!key) return null;
-  return new Groq({ apiKey: key });
+  // Explicit timeout: SDK default can hang for minutes and kill serverless runs.
+  return new Groq({ apiKey: key, timeout: 40000, maxRetries: 1 });
 }
 
 function clean(text: string): string {

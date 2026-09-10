@@ -94,6 +94,8 @@ export async function GET(req: Request) {
     }
 
     const prev = bySlug.get(resolvedSlug);
+    // Excluded rows (SME/unverified) stay buried even if a feed mentions them again
+    if (prev && (prev.data as IpoSeed & { excluded?: boolean }).excluded) continue;
     const base: IpoSeed = prev
       ? { ...(prev.data as IpoSeed), slug: resolvedSlug }
       : seedMatch
@@ -102,10 +104,12 @@ export async function GET(req: Request) {
 
     base.company = prev ? ((prev.data as IpoSeed).company || u.company) : (base.company || u.company);
     base.symbol = u.symbol;
-    // Status never regresses (a stale feed must not drag live -> upcoming)
+    // Status never regresses (a stale feed must not drag live -> upcoming).
+    // NSE "Closed" past the window resolves to listed here (no keep-live exception:
+    // that exception is what stranded Pranav in live for a day).
     const st = guardStatus(base.status, status);
     if (!st.ok) note({ kind: "status-regression-blocked", slug: resolvedSlug, detail: st.reason ?? "" });
-    else base.status = status === "listed" && base.status === "live" ? "live" : status;
+    else base.status = status;
     if (u.openDate) base.openDate = u.openDate;
     if (u.closeDate) base.closeDate = u.closeDate;
     // Band jumps >15% are flagged, not written (splits/revisions need eyes)

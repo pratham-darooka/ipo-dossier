@@ -127,9 +127,10 @@ export function nseStatusToOurs(s: string, closeDate: string | null): "live" | "
   if (t.includes("active")) return "live";
   if (t.includes("forthcoming")) return "upcoming";
   if (t.includes("closed")) {
-    // Closed + listing ~T+3: treat recent closes as allotted/listed bucket -> "listed" keeps them visible
-    if (closeDate && Date.now() - new Date(closeDate).getTime() < 14 * 86400000) return "listed";
-    return "listed";
+    // Closed + window shut (even if NSE still lists the row) = done -> listed.
+    // Close-today edge stays live until tomorrow's run to avoid flip-flopping intraday.
+    if (closeDate && closeDate.slice(0, 10) < new Date().toISOString().slice(0, 10)) return "listed";
+    return "live";
   }
   return "upcoming";
 }

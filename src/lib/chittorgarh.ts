@@ -16,11 +16,14 @@ export function parseBoardCell(cell: string): { company: string; open: string | 
   const m = cell.match(/^(.+?)\s*[A-Z]{0,3}(\d{1,2})\s*([A-Za-z]{3})?\s*-\s*(\d{1,2})\s*([A-Za-z]{3})$/);
   if (!m) return null;
   const [, rawName, d1, mon1, d2, mon2] = m;
+  const company = rawName.trim();
+  // Exchange/institution names leak from nav into board tables — never companies.
+  if (company.length < 4 || /national stock exchange|^nse\b|bombay stock exchange|^bse\b|\bsebi\b|reserve bank|^rbi\b|nifty|sensex|gift nifty/i.test(company)) return null;
   const m2 = MON[mon2.toLowerCase()];
   if (!m2) return null;
   const m1 = (mon1 && MON[mon1.toLowerCase()]) || m2;
   // Cross-month spans like "31 Aug - 02 Sep": start month may be < end month (assume 2026, Aug-Sep window)
-  return { company: rawName.trim(), open: iso(m1, Number(d1)), close: iso(m2, Number(d2)) };
+  return { company, open: iso(m1, Number(d1)), close: iso(m2, Number(d2)) };
 }
 
 /**
