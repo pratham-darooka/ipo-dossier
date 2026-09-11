@@ -21,6 +21,7 @@ export const metadata: Metadata = {
   description:
     "Every mainboard IPO decoded: live NSE subscription, GMP, DRHP forensics, valuation vs peers, and separate verdicts for listing-gain traders and long-term investors.",
   alternates: { canonical: "https://ipo-dossier.vercel.app" },
+  icons: { icon: "/icon.svg", shortcut: "/icon.svg" },
   openGraph: { siteName: "IPO Dossier", type: "website", locale: "en_IN" },
   robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 } },
 };
