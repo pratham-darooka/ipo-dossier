@@ -291,26 +291,26 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
         </section>
       )}
 
-      {/* DOCUMENTS & FILINGS */}
+      {/* DOCUMENTS & FILINGS — NSE-hosted only, by policy */}
       {(() => {
-        const docs: { name: string; url: string; tag: string; live?: boolean }[] = [];
+        const docs: { name: string; url: string; tag: string }[] = [];
         const du = ipo.docUrl || "";
         const host = (u: string) => {
           try {
             return new URL(u).hostname.replace(/^www\./, "");
           } catch {
-            return "source file";
+            return "";
           }
         };
-        if (du) {
+        // Strict NSE-only: never route users to third-party document hosts
+        if (du && /nseindia\.com$/i.test(host(du))) {
           const isDrhp = /drhp|udrhp|draft/i.test(du);
           docs.push({
             name: isDrhp ? "Draft Red Herring Prospectus (DRHP)" : "Red Herring Prospectus (RHP)",
             url: du,
-            tag: host(du),
+            tag: "NSE archives",
           });
         }
-        if (ipo.basisPdf) docs.push({ name: "Basis of Allotment (PDF)", url: ipo.basisPdf, tag: "MUFG Intime", live: true });
         if (ipo.symbol && (ipo.status === "live" || ipo.status === "listed")) {
           docs.push({ name: "Live quote + filings on NSE", url: `https://www.nseindia.com/get-quotes/equity?symbol=${ipo.symbol}`, tag: "NSE India" });
         }
@@ -324,9 +324,7 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
                 <a key={d.url} href={d.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl bg-black/5 dark:bg-white/5 p-4 hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
                   <FileText className="size-5 shrink-0 opacity-60" />
                   <span className="flex-1">
-                    <span className="block text-sm font-bold leading-snug">
-                      {d.name} {d.live && <span className="ml-1 rounded-full bg-[#D4FF4F]/20 px-2 py-0.5 font-mono2 text-[10px] font-bold">LIVE</span>}
-                    </span>
+                    <span className="block text-sm font-bold leading-snug">{d.name}</span>
                     <span className="font-mono2 text-[11px] opacity-50">{d.tag} ↗</span>
                   </span>
                 </a>

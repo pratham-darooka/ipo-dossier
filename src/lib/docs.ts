@@ -79,7 +79,10 @@ async function tsearchPdfs(company: string): Promise<string[]> {
     if (!r.ok) return [];
     const j = (await r.json()) as { results?: { url?: string }[] };
     const urls = (j.results ?? []).map((h) => h.url ?? "").filter(Boolean).filter((u) => !BAD_URL.test(u));
-    return [...urls.filter((u) => /\.pdf(\?|$)/i.test(u) || /nsearchives|sebi\.gov\.in/i.test(u)), ...urls.filter((u) => !/\.pdf(\?|$)/i.test(u))];
+    // Site policy: display links are NSE-only — prefer NSE-hosted PDFs first so the
+    // stored docUrl is directly showable (parsing works from any source, display doesn't).
+    const nseFirst = [...urls.filter((u) => /nseindia\.com/i.test(u)), ...urls.filter((u) => !/nseindia\.com/i.test(u))];
+    return [...nseFirst.filter((u) => /\.pdf(\?|$)/i.test(u) || /nsearchives|sebi\.gov\.in/i.test(u)), ...nseFirst.filter((u) => !/\.pdf(\?|$)/i.test(u))];
   } catch {
     return [];
   }
