@@ -326,6 +326,8 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
             const reg = matchRegistrar(ipo.registrar);
             const regUrl = reg?.url ?? EXCHANGE_FALLBACKS[0].url;
             const regName = reg?.name ?? "BSE";
+            // Time-relative allotment state; ISR re-snapshots on revalidate.
+            // eslint-disable-next-line react-hooks/purity
             const dsc = ipo.closeDate ? Math.floor((Date.now() - new Date(ipo.closeDate).getTime()) / 86400000) : null;
             // Listed + no outcome yet (just closed) still gets the check-now CTA, not the demat note
             if (ipo.status === "listed" && ipo.listingPrice != null) {

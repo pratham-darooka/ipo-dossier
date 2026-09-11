@@ -57,6 +57,9 @@ function daysSinceClose(ipo: IpoSeed, now: number): number | null {
 
 export default async function AllotmentPage() {
   const all = await getAllIpos();
+  // Time-dependent server render is intentional: the allotment window is relative to now,
+  // and ISR revalidation re-snapshots it. See react-hooks/purity exemption below.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   // Check-now window: closed within the last 6 days (basis + early listing), plus live closers within 2 days.
   const checkNow = all
