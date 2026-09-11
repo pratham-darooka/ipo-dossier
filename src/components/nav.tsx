@@ -13,6 +13,7 @@ const LINKS = [
   { href: "/brief", label: "Brief" },
   { href: "/calendar", label: "Calendar" },
   { href: "/compare", label: "Compare" },
+  { href: "/allotment", label: "Allotment" },
   { href: "/performance", label: "GMP Truth" },
   { href: "/watchlist", label: "Watchlist" },
 ];export function Nav() {

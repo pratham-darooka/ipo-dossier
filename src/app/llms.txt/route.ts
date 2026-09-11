@@ -14,6 +14,7 @@ export async function GET() {
     ``,
     `- [IPO calendar](${SITE_URL}/calendar): open/close/allotment/listing dates for every mainboard IPO`,
     `- [Morning brief](${SITE_URL}/brief): daily pre-open snapshot — live demand, GMP movers, opening soon`,
+    `- [Allotment desk](${SITE_URL}/allotment): per-IPO registrar deep links, timing, what to keep ready`,
     `- [GMP truth ledger](${SITE_URL}/performance): grey-market predictions vs actual listing gains`,
     ``,
     ...(live.length ? ["## Live now", ...live.map((i) => `- [${i.company} IPO dossier](${SITE_URL}/ipo/${i.slug}): band ₹${i.priceMin}–₹${i.priceMax}, subscribed ${i.subscription.total || "—"}x`)] : []),

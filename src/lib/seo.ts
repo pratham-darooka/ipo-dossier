@@ -29,6 +29,12 @@ export function ipoFaqs(ipo: IpoSeed, l: number, lt: number, growth: number, mar
         : `Price band not announced yet — this page updates from NSE the hour it drops.`,
     ],
     [
+      `How do I check ${ipo.company} IPO allotment status?`,
+      ipo.registrar
+        ? `On the ${ipo.registrar} portal: select ${ipo.company}, enter PAN, application number, or DP/Client ID, solve the captcha. Results go live 6–10 PM on allotment evening${ipo.closeDate ? ` (issue closed ${fmtDate(ipo.closeDate)})` : ""}. BSE's application-status page works as fallback.`
+        : `On the registrar portal linked from the dossier (or BSE's application-status page) with your PAN, application number, or DP ID — live from allotment evening.`,
+    ],
+    [
       `When is the ${ipo.company} listing date?`,
       ipo.listingPrice != null
         ? `It listed at ₹${ipo.listingPrice} (${ipo.listingGainPct}%).`

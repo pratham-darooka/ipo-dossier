@@ -9,6 +9,7 @@ import { ipoFaqs, ipoJsonLd, SITE_URL } from "@/lib/seo";
 import { JsonLd } from "@/components/json-ld";
 import { VerdictDuo } from "@/components/verdict-duo";
 import { ShareRow } from "@/components/share-row";
+import { matchRegistrar, EXCHANGE_FALLBACKS } from "@/lib/registrars";
 import { Reveal } from "@/components/reveal";
 import { fmtDate } from "@/lib/utils";
 
@@ -320,12 +321,40 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
           </ul>
         </div>
         <div className="rounded-[2rem] border border-white/10 p-6">
-          <h4 className="font-bold flex items-center gap-2"><FileText className="size-4" /> Docs + allotment</h4>
-          <div className="mt-3 flex flex-col gap-2 text-sm">
-            <span className="opacity-60">DRHP/RHP on SEBI + Exchange (source-linked after scrape)</span>
-            <a className="inline-flex items-center gap-1 font-bold" href="https://www.bseindia.com/investors/appli_check.aspx" target="_blank" rel="noreferrer">Check allotment on BSE <ExternalLink className="size-3" /></a>
-            <span className="font-mono2 text-xs opacity-60 flex items-center gap-1"><Building2 className="size-3" /> Registrar: {ipo.registrar || "—"}</span>
-          </div>
+          <h4 className="font-bold flex items-center gap-2"><FileText className="size-4" /> Allotment check</h4>
+          {(() => {
+            const reg = matchRegistrar(ipo.registrar);
+            const regUrl = reg?.url ?? EXCHANGE_FALLBACKS[0].url;
+            const regName = reg?.name ?? "BSE";
+            const dsc = ipo.closeDate ? Math.floor((Date.now() - new Date(ipo.closeDate).getTime()) / 86400000) : null;
+            if (ipo.status === "listed") {
+              return (
+                <div className="mt-3 flex flex-col gap-2 text-sm">
+                  <span className="opacity-80">Allotted shares are in demat (credited pre-listing). Unblocked refunds are back in your bank.</span>
+                  <Link href="/allotment" className="font-bold underline decoration-[#D4FF4F] underline-offset-4">Missed it? Track the next one →</Link>
+                </div>
+              );
+            }
+            if (dsc != null && dsc >= 0 && dsc <= 8) {
+              return (
+                <div className="mt-3 flex flex-col gap-2 text-sm">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#D4FF4F]/15 px-3 py-1 font-mono2 text-xs font-bold text-[#9db82a] dark:text-[#D4FF4F] w-fit">● BASIS OUT — CHECK NOW</span>
+                  <a href={regUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-1 rounded-full bg-[#D4FF4F] px-4 py-2.5 font-bold text-black hover:brightness-110">
+                    Check on {regName} <ExternalLink className="size-4" />
+                  </a>
+                  <span className="opacity-60 text-[13px]">Keep ready: PAN / application no. / DP ID. Results land 6–10 PM.</span>
+                  <a href={EXCHANGE_FALLBACKS[0].url} target="_blank" rel="noreferrer" className="font-bold underline decoration-white/30 underline-offset-4">BSE fallback →</a>
+                </div>
+              );
+            }
+            return (
+              <div className="mt-3 flex flex-col gap-2 text-sm">
+                <span className="opacity-80">Nothing to check yet — basis finalises the evening after close{ipo.closeDate ? ` (${fmtDate(ipo.closeDate)})` : ""}.</span>
+                <Link href="/allotment" className="font-bold underline decoration-[#D4FF4F] underline-offset-4">How allotment day works →</Link>
+                <span className="font-mono2 text-xs opacity-60 flex items-center gap-1"><Building2 className="size-3" /> Registrar: {ipo.registrar || "via BSE"}</span>
+              </div>
+            );
+          })()}
         </div>
       </section>
     </div>
