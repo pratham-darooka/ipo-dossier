@@ -27,6 +27,14 @@ export type IpoSeed = {
   aiVerdict?: { listing: { score: number; verdict: string; reasons: string[]; action: string }; longterm: { score: number; verdict: string; reasons: string[]; action: string }; oneLiner: string; redFlags: string[] };
   aiVerdictAt?: string;
   aiVerdictKey?: string;
+  // Live MUFG basis tracking (verified against their dropdown, not guessed).
+  basisLive?: boolean;
+  mufgId?: string;
+  basisPdf?: string;
+  basisCheckedAt?: string;
+  // Offer-document URL (RHP/DRHP) resolved for parsing + display.
+  docUrl?: string;
+  docTries?: number;
   // Web intel (Tavily, cached — never fetched per page-view).
   news?: { title: string; url: string; publishedDate?: string }[];
 };

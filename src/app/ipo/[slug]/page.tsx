@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, CalendarDays, Building2, Users, AlertTriangle, FileText, ExternalLink, Satellite, Scale, ShieldAlert, Newspaper } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, CalendarDays, Building2, Users, AlertTriangle, FileText, ExternalLink, Satellite, Scale, ShieldAlert, Newspaper } from "lucide-react";
 import { IPOS, minInvestment, expectedListing, type IpoSeed } from "@/lib/data";
 import { findIpo, getAllIpos } from "@/lib/ipos";
 import { scoreListing, scoreLongTerm, verdict } from "@/lib/scoring";
@@ -9,7 +9,8 @@ import { ipoFaqs, ipoJsonLd, SITE_URL } from "@/lib/seo";
 import { JsonLd } from "@/components/json-ld";
 import { VerdictDuo } from "@/components/verdict-duo";
 import { ShareRow } from "@/components/share-row";
-import { matchRegistrar, EXCHANGE_FALLBACKS } from "@/lib/registrars";
+import { GmpChart } from "@/components/gmp-chart";
+import { matchRegistrar } from "@/lib/registrars";
 import { Reveal } from "@/components/reveal";
 import { fmtDate } from "@/lib/utils";
 
@@ -156,6 +157,7 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
           <div className="mt-4 rounded-2xl bg-black/5 dark:bg-white/5 p-4 text-sm">
             <b>Anchor:</b> {ipo.anchorPct ? `${ipo.anchorPct}% of issue pre-placed` : "—"} · <b>Registrar:</b> {ipo.registrar || "—"} · <b>Bankers:</b> {ipo.leadManagers.length ? ipo.leadManagers.join(", ") : "—"}
           </div>
+          <GmpChart history={ipo.gmp.history ?? []} current={ipo.gmp.value} />
           {(ipo.subscription.snii || ipo.subscription.bnii) ? (
             <div className="mt-2 font-mono2 text-xs opacity-60">HNI split — sNII (₹2–10L): <b>{ipo.subscription.snii ?? "—"}x</b> · bNII (&gt;₹10L): <b>{ipo.subscription.bnii ?? "—"}x</b></div>
           ) : null}
@@ -289,6 +291,51 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
         </section>
       )}
 
+      {/* DOCUMENTS & FILINGS */}
+      {(() => {
+        const docs: { name: string; url: string; tag: string; live?: boolean }[] = [];
+        const du = ipo.docUrl || "";
+        const host = (u: string) => {
+          try {
+            return new URL(u).hostname.replace(/^www\./, "");
+          } catch {
+            return "source file";
+          }
+        };
+        if (du) {
+          const isDrhp = /drhp|udrhp|draft/i.test(du);
+          docs.push({
+            name: isDrhp ? "Draft Red Herring Prospectus (DRHP)" : "Red Herring Prospectus (RHP)",
+            url: du,
+            tag: host(du),
+          });
+        }
+        if (ipo.basisPdf) docs.push({ name: "Basis of Allotment (PDF)", url: ipo.basisPdf, tag: "MUFG Intime", live: true });
+        if (ipo.symbol && (ipo.status === "live" || ipo.status === "listed")) {
+          docs.push({ name: "Live quote + filings on NSE", url: `https://www.nseindia.com/get-quotes/equity?symbol=${ipo.symbol}`, tag: "NSE India" });
+        }
+        if (!docs.length) return null;
+        return (
+          <section className="mt-6 rounded-[2rem] border border-white/10 p-6 md:p-8">
+            <h3 className="font-display text-2xl font-black flex items-center gap-2"><FileText className="size-5" /> Documents & filings</h3>
+            <p className="mt-1 text-sm opacity-60">Primary sources — the same PDFs our dossier numbers come from.</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {docs.map((d) => (
+                <a key={d.url} href={d.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl bg-black/5 dark:bg-white/5 p-4 hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                  <FileText className="size-5 shrink-0 opacity-60" />
+                  <span className="flex-1">
+                    <span className="block text-sm font-bold leading-snug">
+                      {d.name} {d.live && <span className="ml-1 rounded-full bg-[#D4FF4F]/20 px-2 py-0.5 font-mono2 text-[10px] font-bold">LIVE</span>}
+                    </span>
+                    <span className="font-mono2 text-[11px] opacity-50">{d.tag} ↗</span>
+                  </span>
+                </a>
+              ))}
+            </div>
+          </section>
+        );
+      })()}
+
       {/* FAQ — real investor questions, answered from the dossier (AEO) */}
       <section className="mt-6 rounded-[2rem] border border-white/10 p-6 md:p-8">
         <h3 className="font-display text-2xl font-black">Questions investors ask about {ipo.company}</h3>
@@ -324,8 +371,6 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
           <h4 className="font-bold flex items-center gap-2"><FileText className="size-4" /> Allotment check</h4>
           {(() => {
             const reg = matchRegistrar(ipo.registrar);
-            const regUrl = reg?.url ?? EXCHANGE_FALLBACKS[0].url;
-            const regName = reg?.name ?? "BSE";
             // Time-relative allotment state; ISR re-snapshots on revalidate.
             // eslint-disable-next-line react-hooks/purity
             const dsc = ipo.closeDate ? Math.floor((Date.now() - new Date(ipo.closeDate).getTime()) / 86400000) : null;
@@ -339,14 +384,40 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
               );
             }
             if (dsc != null && dsc >= 0 && dsc <= 8) {
+              const checkedAt = ipo.basisCheckedAt ? new Date(ipo.basisCheckedAt).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" }) : null;
+              if (!reg) {
+                return (
+                  <div className="mt-3 flex flex-col gap-2 text-sm">
+                    <span className="opacity-80">Registrar confirming — use the allotment desk meanwhile.</span>
+                    <Link href="/allotment" className="inline-flex items-center justify-center gap-1 rounded-full bg-[#D4FF4F] px-4 py-2.5 font-bold text-black hover:brightness-110">
+                      Open allotment desk <ArrowUpRight className="size-4" />
+                    </Link>
+                  </div>
+                );
+              }
               return (
                 <div className="mt-3 flex flex-col gap-2 text-sm">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#D4FF4F]/15 px-3 py-1 font-mono2 text-xs font-bold text-[#9db82a] dark:text-[#D4FF4F] w-fit">● BASIS OUT — CHECK NOW</span>
-                  <a href={regUrl} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-1 rounded-full bg-[#D4FF4F] px-4 py-2.5 font-bold text-black hover:brightness-110">
-                    Check on {regName} <ExternalLink className="size-4" />
+                  {ipo.basisLive ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#D4FF4F]/15 px-3 py-1 font-mono2 text-xs font-bold text-[#9db82a] dark:text-[#D4FF4F] w-fit">● BASIS OUT — CHECK NOW</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E8C15A]/15 px-3 py-1 font-mono2 text-xs font-bold w-fit">
+                      BASIS NOT ON {reg.name.toUpperCase()} YET{checkedAt ? ` · CHECKED ${checkedAt.toUpperCase()}` : ""}
+                    </span>
+                  )}
+                  <a href={reg.url} target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-1 rounded-full bg-[#D4FF4F] px-4 py-2.5 font-bold text-black hover:brightness-110">
+                    Check on {reg.name} <ExternalLink className="size-4" />
                   </a>
-                  <span className="opacity-60 text-[13px]">Keep ready: PAN / application no. / DP ID. Results land 6–10 PM.</span>
-                  <a href={EXCHANGE_FALLBACKS[0].url} target="_blank" rel="noreferrer" className="font-bold underline decoration-white/30 underline-offset-4">BSE fallback →</a>
+                  {!ipo.basisLive && (
+                    <span className="opacity-60 text-[13px]">
+                      This is normal — the company appears in the dropdown only after the registrar uploads the basis, usually 6–11 PM on allotment evening. If it{"'"}s missing, try again in the morning.
+                    </span>
+                  )}
+                  {ipo.basisPdf && (
+                    <a href={ipo.basisPdf} target="_blank" rel="noreferrer" className="font-bold underline decoration-[#D4FF4F] underline-offset-4">
+                      Download basis-of-allotment PDF →
+                    </a>
+                  )}
+                  <span className="opacity-60 text-[13px]">Keep ready: PAN / application no. / DP ID.</span>
                 </div>
               );
             }
@@ -354,7 +425,7 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
               <div className="mt-3 flex flex-col gap-2 text-sm">
                 <span className="opacity-80">Nothing to check yet — basis finalises the evening after close{ipo.closeDate ? ` (${fmtDate(ipo.closeDate)})` : ""}.</span>
                 <Link href="/allotment" className="font-bold underline decoration-[#D4FF4F] underline-offset-4">How allotment day works →</Link>
-                <span className="font-mono2 text-xs opacity-60 flex items-center gap-1"><Building2 className="size-3" /> Registrar: {ipo.registrar || "via BSE"}</span>
+                <span className="font-mono2 text-xs opacity-60 flex items-center gap-1"><Building2 className="size-3" /> Registrar: {ipo.registrar || "announced soon"}</span>
               </div>
             );
           })()}

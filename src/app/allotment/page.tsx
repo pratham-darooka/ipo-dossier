@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { ArrowUpRight, BellRing, Building2, ExternalLink } from "lucide-react";
 import { getAllIpos } from "@/lib/ipos";
-import { matchRegistrar, REGISTRARS, EXCHANGE_FALLBACKS } from "@/lib/registrars";
+import { matchRegistrar, REGISTRARS } from "@/lib/registrars";
 import { Reveal } from "@/components/reveal";
 import { JsonLd } from "@/components/json-ld";
 import { SITE_URL, faqJsonLd } from "@/lib/seo";
@@ -45,7 +45,7 @@ const FAQS: [string, string][] = [
   ],
   [
     "The registrar site is slow or down. What now?",
-    "Use the BSE application-status page (PAN-based, works across all issues) or try Bigshare's Server 2/3 instead of Server 1 during the 6–8 PM rush. Exchange portals update a few hours after registrars.",
+    "Try Bigshare's Server 2/3 instead of Server 1 during the 6–8 PM rush, wait till after 9 PM when crowds thin, or check again in the morning — allotment data doesn't move once published.",
   ],
 ];
 
@@ -113,19 +113,16 @@ export default async function AllotmentPage() {
                           Check on {reg.name} <ExternalLink className="size-4" />
                         </a>
                       ) : (
-                        <a href={EXCHANGE_FALLBACKS[0].url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full bg-[#D4FF4F] px-5 py-2.5 text-sm font-bold text-black hover:brightness-110">
-                          Check on BSE <ExternalLink className="size-4" />
-                        </a>
+                        <Link href={`/ipo/${ipo.slug}`} className="inline-flex items-center gap-1.5 rounded-full bg-[#D4FF4F] px-5 py-2.5 text-sm font-bold text-black hover:brightness-110">
+                          Open dossier <ArrowUpRight className="size-4" />
+                        </Link>
                       )}
-                      <a href={EXCHANGE_FALLBACKS[0].url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full border border-white/20 px-4 py-2.5 text-sm font-bold hover:bg-white/5">
-                        BSE fallback
-                      </a>
                       <Link href={`/ipo/${ipo.slug}`} className="inline-flex items-center gap-1 text-sm font-bold ml-auto">
                         Dossier <ArrowUpRight className="size-4" />
                       </Link>
                     </div>
                     <div className="mt-3 font-mono2 text-[11px] opacity-60">
-                      REGISTRAR: {ipo.registrar || "via BSE"} · KEEP READY: PAN / application no. / DP ID
+                      REGISTRAR: {ipo.registrar || "confirming"} · KEEP READY: PAN / application no. / DP ID
                     </div>
                   </div>
                 </Reveal>
@@ -144,7 +141,7 @@ export default async function AllotmentPage() {
           {[
             ["T+1 evening", "Basis finalised", "Registrar computes lottery/pro-rata. Nothing exists to check before this."],
             ["6–10 PM", "Registrar goes live", "MUFG/KFin/Bigshare publish first. This is your window — expect crowds."],
-            ["Late night", "Exchanges follow", "BSE/NSE mirror the same result a few hours later. Best fallback."],
+            ["Late night", "Registrar mirrors", "Results stay live on the registrar through listing — recheck anytime, crowds gone."],
             ["Pre-listing", "Demat credit", "Allotted shares appear in holdings a day before listing. Refunds unblock alongside."],
           ].map(([t, h, d]) => (
             <div key={h} className="rounded-3xl border border-white/10 p-5">
@@ -172,14 +169,6 @@ export default async function AllotmentPage() {
               <div className="mt-2 font-mono2 text-xs opacity-60">ACCEPTS: {r.accepts.join(" · ")}</div>
               <p className="mt-2 text-sm opacity-70">{r.tip}</p>
             </div>
-          ))}
-        </div>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          {EXCHANGE_FALLBACKS.map((e) => (
-            <a key={e.key} href={e.url} target="_blank" rel="noreferrer" className="rounded-3xl border border-dashed border-[#D4FF4F]/40 p-5 hover:bg-[#D4FF4F]/5 block">
-              <div className="font-bold inline-flex items-center gap-1">{e.name} <ExternalLink className="size-4" /></div>
-              <p className="mt-1 text-sm opacity-70">{e.tip}</p>
-            </a>
           ))}
         </div>
       </section>

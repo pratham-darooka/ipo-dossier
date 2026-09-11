@@ -7,6 +7,7 @@ import { nseToPartial } from "@/lib/ipos";
 import { deepDiveDoc, resolveDocUrl } from "@/lib/docs";
 import { pressEnrich } from "@/lib/enrich";
 import { indexNowPing } from "@/lib/indexnow";
+import { fetchMufgDropdown, basisPdfLive, matchMufg } from "@/lib/mufg";
 import { REGISTRARS, EXCHANGE_FALLBACKS } from "@/lib/registrars";
 import { guardSubscription, guardListingPrice, guardBand, guardStatus, tokenOverlap, type Anomaly } from "@/lib/guards";
 
@@ -232,7 +233,8 @@ export async function GET(req: Request) {
     }
   }
 
-  // --- 2. Enrichment, priority-ordered with hard budgets ---
+  // --- 1d. MUFG live basis check lives after enrichment setup (needs all/DEADLINE). ---
+
   const all = (await q`SELECT slug, company, status, data FROM ipo WHERE slug != '_pipeline_heartbeat'`) as {
     slug: string; company: string; status: string; data: IpoSeed;
   }[];
@@ -329,6 +331,42 @@ export async function GET(req: Request) {
       }
     } catch { /* per-symbol miss never breaks the run */ }
   }
+
+  // --- 1d. MUFG live basis check: is this IPO in their allotment dropdown RIGHT NOW?
+  // One dropdown fetch + HEAD probes only for matched rows. Answers "why isn't it listed"
+  // with verified data instead of timing guesses.
+  let basisChecked = 0;
+  try {
+    const dropdown = await fetchMufgDropdown();
+    if (dropdown.length) {
+      for (const r of all) {
+        if (Date.now() > DEADLINE) {
+          timedOut = true;
+          break;
+        }
+        const d = r.data as IpoSeed;
+        if (!/mufg|link\s*intime|intime/i.test(d.registrar || "")) continue;
+        if (r.status !== "live" && r.status !== "listed") continue;
+        const hit = matchMufg(d.company, dropdown);
+        const wasLive = d.basisLive === true;
+        d.basisLive = Boolean(hit);
+        d.basisCheckedAt = new Date().toISOString();
+        if (hit) {
+          d.mufgId = hit.id;
+          const pdf = await basisPdfLive(hit.id);
+          if (pdf && d.basisPdf !== pdf) {
+            d.basisPdf = pdf;
+            note({ kind: "basis-pdf-live", slug: r.slug, detail: hit.name });
+          }
+          if (!wasLive) note({ kind: "basis-live", slug: r.slug, detail: `${d.company} appeared in MUFG dropdown` });
+        }
+        d.syncedAt = new Date().toISOString();
+        await q`UPDATE ipo SET data = ${JSON.stringify(d)}::jsonb, updated_at = NOW() WHERE slug = ${r.slug}`;
+        touched.add(r.slug);
+        basisChecked++;
+      }
+    }
+  } catch { /* basis check never breaks the run */ }
 
   for (const r of all) {
     // Excluded rows (e.g. SME misfiling) are left untouched by automation
@@ -458,7 +496,7 @@ export async function GET(req: Request) {
     }
   }
 
-  await beat({ phase: "done", docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, splitsFilled, tavilySpent, timedOut });
+  await beat({ phase: "done", docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, splitsFilled, basisChecked, tavilySpent, timedOut });
 
   // Cache invalidation: without this, ISR pages (home 30min, calendar 30min) keep
   // serving pre-sync HTML after status changes (e.g. upcoming -> live). Any write
@@ -502,5 +540,5 @@ export async function GET(req: Request) {
   }
 
   const dbRows = (await q`SELECT count(*)::int AS n FROM ipo WHERE slug NOT LIKE '_pipeline%'`)[0] as { n: number };
-  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, splitsFilled, tavilySpent, timedOut, revalidated: revalidated.length, touched: touched.size, indexed, telegram, anomalies: anomalies.length, dbRows: dbRows.n });
+  return NextResponse.json({ ok: true, db: "neon", nse: upcoming.length, live: live.length, updated, inserted, forthcomingNew, transitioned, docsParsed, listingsFixed, newsCached, pressFilled, chitFilled, splitsFilled, basisChecked, tavilySpent, timedOut, revalidated: revalidated.length, touched: touched.size, indexed, telegram, anomalies: anomalies.length, dbRows: dbRows.n });
 }
