@@ -327,7 +327,8 @@ export default async function IpoPage({ params }: { params: Promise<{ slug: stri
             const regUrl = reg?.url ?? EXCHANGE_FALLBACKS[0].url;
             const regName = reg?.name ?? "BSE";
             const dsc = ipo.closeDate ? Math.floor((Date.now() - new Date(ipo.closeDate).getTime()) / 86400000) : null;
-            if (ipo.status === "listed") {
+            // Listed + no outcome yet (just closed) still gets the check-now CTA, not the demat note
+            if (ipo.status === "listed" && ipo.listingPrice != null) {
               return (
                 <div className="mt-3 flex flex-col gap-2 text-sm">
                   <span className="opacity-80">Allotted shares are in demat (credited pre-listing). Unblocked refunds are back in your bank.</span>
