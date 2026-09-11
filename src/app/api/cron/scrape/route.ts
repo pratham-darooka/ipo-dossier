@@ -7,6 +7,7 @@ import { nseToPartial } from "@/lib/ipos";
 import { deepDiveDoc, resolveDocUrl } from "@/lib/docs";
 import { pressEnrich } from "@/lib/enrich";
 import { indexNowPing } from "@/lib/indexnow";
+import { REGISTRARS, EXCHANGE_FALLBACKS } from "@/lib/registrars";
 import { guardSubscription, guardListingPrice, guardBand, guardStatus, tokenOverlap, type Anomaly } from "@/lib/guards";
 
 /** Fold every non-empty field from src into dst. Returns keys taken. */
@@ -255,6 +256,25 @@ export async function GET(req: Request) {
     ON CONFLICT (slug) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()
   `;
   await beat({ phase: "sync-done", docsParsed: 0, listingsFixed: 0, newsCached: 0, timedOut: false });
+
+  // Dead-link sentinel: registrar portals die (rebrands, outages) and our
+  // allotment CTAs would point at corpses. Cheap HEAD checks, anomalies on failure.
+  try {
+    const targets = [...REGISTRARS.map((r) => ({ name: r.name, url: r.url })), ...EXCHANGE_FALLBACKS.map((e) => ({ name: e.name, url: e.url }))];
+    await Promise.all(
+      targets.map(async ({ name, url }) => {
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 8000);
+          const r = await fetch(url, { method: "HEAD", redirect: "follow", signal: ctrl.signal });
+          clearTimeout(t);
+          if (!r.ok) note({ kind: "registrar-down", slug: "-", detail: `${name} -> HTTP ${r.status}` });
+        } catch {
+          note({ kind: "registrar-down", slug: "-", detail: `${name} unreachable` });
+        }
+      })
+    );
+  } catch { /* sentinel never breaks the run */ }
 
   let docsParsed = 0;
   let listingsFixed = 0;

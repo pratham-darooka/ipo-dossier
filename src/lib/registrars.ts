@@ -19,9 +19,9 @@ export const REGISTRARS: Registrar[] = [
     key: "mufg-intime",
     name: "MUFG Intime India",
     aka: "formerly Link Intime",
-    url: "https://linkintime.co.in/IPO/",
+    url: "https://in.mpms.mufg.com/Initial_Offer/public-issues.html",
     accepts: ["PAN", "Application No.", "DP / Client ID"],
-    tip: "Handles the largest share of mainboard IPOs. Select the company first — it appears only after the basis is finalised.",
+    tip: "Handles the largest share of mainboard IPOs. Old linkintime.co.in bookmarks are dead — use this MUFG address. Select the company first (appears only after basis is finalised); PAN must be UPPERCASE.",
     share: "large",
   },
   {
